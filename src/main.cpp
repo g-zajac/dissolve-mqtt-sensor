@@ -1,6 +1,6 @@
 #include <Arduino.h>
 
-#define LED 16            // Led in NodeMCU at pin GPIO16 (D0).
+#define LED 2            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
 void setup() {
 pinMode(LED, OUTPUT);    // LED pin as output.
 }
