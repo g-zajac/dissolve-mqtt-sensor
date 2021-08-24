@@ -1,12 +1,24 @@
+
+char* VERSION ="1.0.2";
+
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include "credentials.h"
 #include <PubSubClient.h>
 
-#define LED 2            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
+#include <ESPAsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <AsyncElegantOTA.h>
+
+#define LED 16            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
+#define LED_ESP 2
+
+unsigned long previousTime = millis();
+const unsigned long interval = 1000;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
+AsyncWebServer server(80);
 
 void callback(char* topic, byte* payload, unsigned int length) {
 
@@ -25,6 +37,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void setup() {
 pinMode(LED, OUTPUT);    // LED pin as output.
+pinMode(LED_ESP, OUTPUT);
 
 Serial.begin(115200);
 Serial.println();
@@ -61,15 +74,26 @@ while (!client.connected()) {
     }
   }
 
-  client.publish("esp/test", "Hello from ESP8266");
-  client.subscribe("esp/test");
+client.publish("esp/test", "Hello from ESP8266");
+client.subscribe("esp/test");
+
+server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Hi! I am ESP8266.");
+  });
+
+  AsyncElegantOTA.begin(&server);    // Start ElegantOTA
+  server.begin();
+  Serial.println("HTTP server started");
+digitalWrite(LED_ESP, LOW);
 }
 
 void loop() {
-digitalWrite(LED, HIGH);// turn the LED off.(Note that LOW is the voltage level but actually
-                        //the LED is on; this is because it is acive low on the ESP8266.
-delay(1000);            // wait for 1 second.
-digitalWrite(LED, LOW); // turn the LED on.
-delay(1000); // wait for 1 second.
-client.publish("esp/test", "Hello from ESP8266");
+AsyncElegantOTA.loop();
+
+unsigned long diff = millis() - previousTime;
+  if(diff > interval) {
+    digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
+    client.publish("esp/version", VERSION);
+    previousTime += diff;
+  }
 }
