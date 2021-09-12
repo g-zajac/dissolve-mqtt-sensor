@@ -1,6 +1,9 @@
-#define VERSION "1.0.6a"
+#define VERSION "1.0.8"
 #define SENSOR_ID 1
+#define SENSOR_TYPE "proximity"
 #define MQTT_TOPIC "dissolve/sensor/"
+// TODO set default sensor and sys data sampling rate
+#define MQTT_RATE 1
 
 // #define OTA
 
@@ -33,19 +36,17 @@ PubSubClient client(espClient);
 #endif
 
 // form mqtt topic based on template and id
-char* topicPrefix = strdup(MQTT_TOPIC);
-char* unit_id = (char*) SENSOR_ID;
-char* topic;
-
-// String id = String(SENSOR_ID);
-// char id_char[2];
-// id.toCharArray(id, id_char, 10);
-// char* topicID = id;
-
-// sprintf(topic, "/%c/%c/, topicPrefix, unit_id");
-
+String topicPrefix = MQTT_TOPIC;
+String unit_id = String(SENSOR_ID);
+String topic = topicPrefix + unit_id;
 
 // functions
+
+//TODO convert to human friendly texh HH:MM:SS?
+int uptimeInSecs(){
+  return (int)(millis()/1000);
+}
+
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived in topic: ");
   Serial.println(topic);
@@ -107,50 +108,55 @@ while (!client.connected()) {
     Serial.println("HTTP server started");
   digitalWrite(LED_ESP, LOW);
 #endif
-}
+
+} // end of setup
 
 void loop() {
 
+//TODO split sys report and sensor data
 unsigned long diff = millis() - previousTime;
   if(diff > interval) {
     digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
 
-    // char mqtt_version[32];
-    // mqtt_version[0] = {0};  //reset buffor, start with a null string
-    // snprintf(mqtt_version, 32, "%s", MQTT_TOPIC);
-    // strcat(mqtt_version, mqtt_topic);
-    // strcat(mqtt_topic, "version");
-    //
-    String input_string = VERSION;
-    // int input_string_length = input_string.length()+1;
-    // char input_string_array[input_string_length];
-    // input_string.toCharArray(input_string_array, input_string_length);
-    //
-    // client.publish(mqtt_topic, input_string_array);
+    String version_topic = topic + "/sys/ver";
+    const char * version_topic_char = version_topic.c_str();
+    const char * version = VERSION;
+    client.publish(version_topic_char, version);
 
+    String rssi_topic = topic + "/sys/rssi";
+    const char * rssi_topic_char = rssi_topic.c_str();
     int32_t rssi = WiFi.RSSI();
     char rssichar[20];
     itoa(rssi, rssichar, 10);
-    client.publish("esp/rssi", rssichar);
+    client.publish(rssi_topic_char, rssichar);
 
+    String ip_topic = topic + "/sys/ip";
+    const char * ip_topic_char = ip_topic.c_str();
     const char* strLocalIp = WiFi.localIP().toString().c_str();
-    client.publish("esp/ip", strLocalIp);
+    client.publish(ip_topic_char, strLocalIp);
+
+    String uptime_topic = topic + "/sys/uptime";
+    const char * uptime_topic_char = uptime_topic.c_str();
+    char uptime_char[10];
+    itoa(uptimeInSecs(), uptime_char, 10);
+    client.publish(uptime_topic_char, uptime_char);
+
+    String type_topic = topic + "/sys/type";
+    const char * type_topic_char = type_topic.c_str();
+    const char * type = SENSOR_TYPE;
+    client.publish(type_topic_char, type);
 
     // Print serial report
     String report;
     report = "Ver: ";
-    report += input_string;
+    report += version;
     report += ", IP: ";
     report += WiFi.localIP().toString();
     report += ", rssi: ";
     report += rssichar;
+    report += ", type: ";
+    report += type;
     Serial.println(report);
-
-
-    // test
-    // Serial.println("-------------------------");
-    // Serial.print("topicPrefix: "); Serial.print(topicPrefix);
-    // Serial.print(", unit_id: "); Serial.print(unit_id);
 
     previousTime += diff;
   }
