@@ -1,4 +1,4 @@
-#define VERSION "1.1.1"
+#define VERSION "1.1.3"
 #define SENSOR_ID 1
 #define SENSOR_TYPE "proximity"
 #define MQTT_TOPIC "dissolve/sensor/"
@@ -51,6 +51,8 @@ PubSubClient client(espClient);
 String topicPrefix = MQTT_TOPIC;
 String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + unit_id;
+
+bool block_report = false;
 
 // functions
 
@@ -143,14 +145,22 @@ void loop() {
 
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
-      float proximity = measure_distance();
-      Serial.print("Distance: ");
-      Serial.println(proximity);
+    block_report = true;
+    float proximity = measure_distance();
+    Serial.print("Distance: ");
+    Serial.println(proximity);
+
+    String proximity_topic = topic + "/data";
+    const char * proximity_topic_char = proximity_topic.c_str();
+    char prox_char[8];
+    itoa(proximity, prox_char, 10);
+    client.publish(proximity_topic_char, prox_char);
     previousSensorTime = millis();
+    block_report = false;
   }
 
 unsigned long reportDiff = millis() - previousReportTime;
-  if(reportDiff > reportInterval) {
+  if((reportDiff > reportInterval) && !block_report){
     digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
 
     String version_topic = topic + "/sys/ver";
