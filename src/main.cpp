@@ -1,10 +1,13 @@
-#define VERSION "1.1.3"
+#define VERSION "1.1.7"
 #define SENSOR_ID 1
 #define SENSOR_TYPE "proximity"
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
 
-// #define OTA
+#define OTA
+#define SERIAL_DEBUG
+#define MQTT_REPORT
+
 #define REPORT_RATE 3000 // in ms
 #define SENSOR_RATE 500
 
@@ -33,9 +36,10 @@ extern "C"{
 #define echoPin 4 //D2 SDA
 #define trigPin 14//D5 SCLK
 
-
-unsigned long previousReportTime = millis();
-const unsigned long reportInterval = REPORT_RATE;
+#ifdef MQTT_REPORT
+  unsigned long previousReportTime = millis();
+  const unsigned long reportInterval = REPORT_RATE;
+#endif
 
 unsigned long previousSensorTime = millis();
 const unsigned long sensorInterval = SENSOR_RATE;
@@ -96,7 +100,26 @@ pinMode(LED, OUTPUT);    // LED pin as output.
 pinMode(LED_ESP, OUTPUT);
 
 Serial.begin(115200);
-Serial.println();
+
+#ifdef SERIAL_DEBUG
+  Serial.println("\r\n--------------------------------");        // compiling info
+  Serial.print("Ver: "); Serial.println(VERSION);
+  Serial.println("by Grzegorz Zajac");
+  Serial.println("Compiled: " __DATE__ ", " __TIME__ ", " __VERSION__);
+  Serial.println("---------------------------------");
+  Serial.println("ESP Info: ");
+  Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
+  Serial.print( F("Boot Vers: ") ); Serial.println(system_get_boot_version());
+  Serial.print( F("CPU: ") ); Serial.println(system_get_cpu_freq());
+  Serial.print( F("SDK: ") ); Serial.println(system_get_sdk_version());
+  Serial.print( F("Chip ID: ") ); Serial.println(system_get_chip_id());
+  Serial.print( F("Flash ID: ") ); Serial.println(spi_flash_get_id());
+  Serial.print( F("Flash Size: ") ); Serial.println(ESP.getFlashChipRealSize());
+  Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
+  Serial.printf("Free size: %u\n", ESP.getFreeSketchSpace());
+  Serial.print( F("Vcc: ") ); Serial.println(ESP.getVcc());
+  Serial.println();
+#endif
 
 WiFi.begin(mySSID, myPASSWORD);
 
@@ -159,51 +182,63 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     block_report = false;
   }
 
-unsigned long reportDiff = millis() - previousReportTime;
-  if((reportDiff > reportInterval) && !block_report){
-    digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
+#ifdef MQTT_REPORT
+  unsigned long reportDiff = millis() - previousReportTime;
+    if((reportDiff > reportInterval) && !block_report){
+      digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
 
-    String version_topic = topic + "/sys/ver";
-    const char * version_topic_char = version_topic.c_str();
-    const char * version = VERSION;
-    client.publish(version_topic_char, version);
+      String version_topic = topic + "/sys/ver";
+      const char * version_topic_char = version_topic.c_str();
+      const char * version = VERSION;
+      client.publish(version_topic_char, version);
 
-    String rssi_topic = topic + "/sys/rssi";
-    const char * rssi_topic_char = rssi_topic.c_str();
-    int32_t rssi = WiFi.RSSI();
-    char rssichar[20];
-    itoa(rssi, rssichar, 10);
-    client.publish(rssi_topic_char, rssichar);
+      String compilation_topic = topic + "/sys/comp";
+      const char * comp_topic_char = compilation_topic.c_str();
+      char comp_time[24] = __DATE__ ;
+      strcat(comp_time, " ");
+      strcat(comp_time, __TIME__);
+      const char * comp_time_char = comp_time;
+      client.publish(comp_topic_char, comp_time_char);
 
-    String ip_topic = topic + "/sys/ip";
-    const char * ip_topic_char = ip_topic.c_str();
-    const char* strLocalIp = WiFi.localIP().toString().c_str();
-    client.publish(ip_topic_char, strLocalIp);
+      String rssi_topic = topic + "/sys/rssi";
+      const char * rssi_topic_char = rssi_topic.c_str();
+      int32_t rssi = WiFi.RSSI();
+      char rssichar[20];
+      itoa(rssi, rssichar, 10);
+      client.publish(rssi_topic_char, rssichar);
 
-    String uptime_topic = topic + "/sys/uptime";
-    const char * uptime_topic_char = uptime_topic.c_str();
-    char uptime_char[10];
-    itoa(uptimeInSecs(), uptime_char, 10);
-    client.publish(uptime_topic_char, uptime_char);
+      String ip_topic = topic + "/sys/ip";
+      const char * ip_topic_char = ip_topic.c_str();
+      const char* strLocalIp = WiFi.localIP().toString().c_str();
+      client.publish(ip_topic_char, strLocalIp);
 
-    String type_topic = topic + "/sys/type";
-    const char * type_topic_char = type_topic.c_str();
-    const char * type = SENSOR_TYPE;
-    client.publish(type_topic_char, type);
+      String uptime_topic = topic + "/sys/uptime";
+      const char * uptime_topic_char = uptime_topic.c_str();
+      char uptime_char[10];
+      itoa(uptimeInSecs(), uptime_char, 10);
+      client.publish(uptime_topic_char, uptime_char);
 
-    // Print serial report
-    String report;
-    report = "Ver: ";
-    report += version;
-    report += ", IP: ";
-    report += WiFi.localIP().toString();
-    report += ", rssi: ";
-    report += rssichar;
-    report += ", type: ";
-    report += type;
-    Serial.println(report);
+      String type_topic = topic + "/sys/type";
+      const char * type_topic_char = type_topic.c_str();
+      const char * type = SENSOR_TYPE;
+      client.publish(type_topic_char, type);
 
-    // previousReportTime += reportDiff;
-    previousReportTime = millis();
-  }
+      // Print serial report
+      String report;
+      report = "Ver: ";
+      report += version;
+      report += ", IP: ";
+      report += WiFi.localIP().toString();
+      report += ", rssi: ";
+      report += rssichar;
+      report += ", type: ";
+      report += type;
+      report += " , last compilation: ";
+      report += comp_time;
+      Serial.println(report);
+
+      // previousReportTime += reportDiff;
+      previousReportTime = millis();
+    }
+  #endif
 }
