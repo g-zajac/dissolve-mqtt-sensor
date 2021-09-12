@@ -1,11 +1,12 @@
-#define VERSION "1.0.8"
+#define VERSION "1.1.1"
 #define SENSOR_ID 1
 #define SENSOR_TYPE "proximity"
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
-#define MQTT_RATE 1
 
 // #define OTA
+#define REPORT_RATE 3000 // in ms
+#define SENSOR_RATE 500
 
 // LIBRARIES
 #include <Arduino.h>
@@ -25,8 +26,19 @@ extern "C"{
 #define LED 16            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
 #define LED_ESP 2
 
-unsigned long previousTime = millis();
-const unsigned long interval = 1000;
+#define SONOFF_LED1 13 //
+#define SONOFF_LED2 12 // relay
+
+// sensors pin map (sonoff minijack avaliable pins: 4, 14);
+#define echoPin 4 //D2 SDA
+#define trigPin 14//D5 SCLK
+
+
+unsigned long previousReportTime = millis();
+const unsigned long reportInterval = REPORT_RATE;
+
+unsigned long previousSensorTime = millis();
+const unsigned long sensorInterval = SENSOR_RATE;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -47,6 +59,18 @@ int uptimeInSecs(){
   return (int)(millis()/1000);
 }
 
+float measure_distance(){
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  float duration = pulseIn(echoPin, HIGH);
+  float distance = (duration*.0343)/2;
+  return distance;
+}
+
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived in topic: ");
   Serial.println(topic);
@@ -62,6 +86,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void setup() {
+// sensor setup
+pinMode(trigPin, OUTPUT);
+pinMode(echoPin, INPUT);
+
 pinMode(LED, OUTPUT);    // LED pin as output.
 pinMode(LED_ESP, OUTPUT);
 
@@ -113,9 +141,16 @@ while (!client.connected()) {
 
 void loop() {
 
-//TODO split sys report and sensor data
-unsigned long diff = millis() - previousTime;
-  if(diff > interval) {
+unsigned long sensorDiff = millis() - previousSensorTime;
+  if(sensorDiff > sensorInterval) {
+      float proximity = measure_distance();
+      Serial.print("Distance: ");
+      Serial.println(proximity);
+    previousSensorTime = millis();
+  }
+
+unsigned long reportDiff = millis() - previousReportTime;
+  if(reportDiff > reportInterval) {
     digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
 
     String version_topic = topic + "/sys/ver";
@@ -158,6 +193,7 @@ unsigned long diff = millis() - previousTime;
     report += type;
     Serial.println(report);
 
-    previousTime += diff;
+    // previousReportTime += reportDiff;
+    previousReportTime = millis();
   }
 }
