@@ -1,0 +1,3 @@
+Sonoff TH mem chip: P25080H
+
+Common sizes are 512 kB (4Mbit), 1 MB (8Mbit) and 4 MB
