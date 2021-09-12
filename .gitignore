@@ -3,3 +3,4 @@
 .gcc-flags.json
 credentials.h
 /ota
+.DS_Store
