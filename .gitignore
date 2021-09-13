@@ -1,3 +1,6 @@
 .pio
 .clang_complete
 .gcc-flags.json
+credentials.h
+/ota
+.DS_Store
