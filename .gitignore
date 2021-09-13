@@ -4,3 +4,4 @@
 credentials.h
 /ota
 .DS_Store
+/lib
