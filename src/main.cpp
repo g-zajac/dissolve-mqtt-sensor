@@ -1,10 +1,12 @@
-#define VERSION "1.1.7"
+#define VERSION "1.2.1b"
 #define SENSOR_ID 1
 #define SENSOR_TYPE "proximity"
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
 
-#define OTA
+// #define OTA
+#define OTA2
+
 #define SERIAL_DEBUG
 #define MQTT_REPORT
 
@@ -24,6 +26,10 @@ extern "C"{
   #include <ESPAsyncTCP.h>
   #include <ESPAsyncWebServer.h>
   #include <AsyncElegantOTA.h>
+#endif
+
+#ifdef OTA2
+  #include <WebOTA.h>
 #endif
 
 #define LED 16            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
@@ -162,9 +168,19 @@ while (!client.connected()) {
   digitalWrite(LED_ESP, LOW);
 #endif
 
+#ifdef OTA2
+  // To use a specific port and path uncomment this line
+  // Defaults are 8080 and "/webota"
+  webota.init(8888, "/update");
+#endif
+
 } // end of setup
 
 void loop() {
+
+#ifdef OTA2
+  webota.handle();
+#endif
 
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
