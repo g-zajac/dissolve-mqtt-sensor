@@ -18,3 +18,11 @@ curl -F "file=@MyImage.bin" http://esp-ota.local:8080/webota
 
 pinmap
 https://tinkerman.cat/post/sonoff-th10-th16-sensors-displays-actuators/
+
+
+PROXIMITY
++ orange
+- blue
+
+ GPIO14 blue/white - echo
+ GPIO4 orange/white - triger
