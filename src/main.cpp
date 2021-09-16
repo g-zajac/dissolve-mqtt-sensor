@@ -1,6 +1,7 @@
-#define VERSION "1.2.1b"
+#define VERSION "1.2.2"
 #define SENSOR_ID 1
-#define SENSOR_TYPE "proximity"
+// #define SENSOR_TYPE "proximity"
+#define PROXIMITY
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
 
@@ -11,7 +12,7 @@
 #define MQTT_REPORT
 
 #define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 500
+#define SENSOR_RATE 1000
 
 // LIBRARIES
 #include <Arduino.h>
@@ -32,15 +33,18 @@ extern "C"{
   #include <WebOTA.h>
 #endif
 
-#define LED 16            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
+#define LED 13            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
 #define LED_ESP 2
 
-#define SONOFF_LED1 13 //
-#define SONOFF_LED2 12 // relay
+// #define SONOFF_LED1 13 //
+// TODO add MQTT subscription for relay control
+// #define SONOFF_LED2 12 // relay
 
-// sensors pin map (sonoff minijack avaliable pins: 4, 14);
-#define echoPin 4 //D2 SDA
-#define trigPin 14//D5 SCLK
+#ifdef PROXIMITY
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define echoPin 4 //D2 SDA
+  #define trigPin 14//D5 SCLK
+#endif
 
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -236,8 +240,10 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       String type_topic = topic + "/sys/type";
       const char * type_topic_char = type_topic.c_str();
-      const char * type = SENSOR_TYPE;
-      client.publish(type_topic_char, type);
+      // const char * type = SENSOR_TYPE;
+      #ifdef PROXIMITY
+        client.publish(type_topic_char, "proximity");
+      #endif
 
       // Print serial report
       String report;
