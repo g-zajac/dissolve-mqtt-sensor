@@ -1,7 +1,8 @@
-#define VERSION "1.2.3"
+#define VERSION "1.2.4"
 #define SENSOR_ID 1
 
 #define PROXIMITY
+// #define WEIGHT
 
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -34,6 +35,10 @@ extern "C"{
   #include <WebOTA.h>
 #endif
 
+#ifdef WEIGHT
+  #include <HX711_ADC.h>
+#endif
+
 #define LED 13            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
 #define LED_ESP 2
 
@@ -43,8 +48,14 @@ extern "C"{
 
 #ifdef PROXIMITY
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define echoPin 4 //D2 SDA
-  #define trigPin 14//D5 SCLK
+  #define trigPin 4 //D2 SDA
+  #define echoPin 14//D5 SCLK
+#endif
+
+#ifdef WEIGHT
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define sda_pin 4 //D2 SDA
+  #define clk_pin 14//D5 SCLK
 #endif
 
 #ifdef MQTT_REPORT
