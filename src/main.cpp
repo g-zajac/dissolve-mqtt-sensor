@@ -2,7 +2,8 @@
 #define SENSOR_ID 1
 
 // #define PROXIMITY
-#define WEIGHT
+// #define WEIGHT
+#define GYRO
 
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -39,6 +40,12 @@ extern "C"{
   #include <HX711_ADC.h>
 #endif
 
+#ifdef GYRO
+  #include <Wire.h>
+  #include <L3G.h>
+  L3G gyro;
+#endif
+
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
 
@@ -54,6 +61,12 @@ extern "C"{
 #endif
 
 #ifdef WEIGHT
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define sda_pin 4 //D2 SDA - orange/white
+  #define clk_pin 14//D5 SCLK - blue/white
+#endif
+
+#ifdef GYRO
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
   #define sda_pin 4 //D2 SDA - orange/white
   #define clk_pin 14//D5 SCLK - blue/white
@@ -134,6 +147,16 @@ void setup() {
   LoadCell.begin();                 // start connection to load cell module
   LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
   LoadCell.setCalFactor(calValue);
+#endif
+
+#ifdef GYRO
+  Wire.begin(sda_pin, clk_pin);
+  if (!gyro.init())
+  {
+    Serial.println("Failed to autodetect gyro type!");
+    while (1);
+  }
+  gyro.enableDefault();
 #endif
 
 pinMode(sonoff_led_blue, OUTPUT);
@@ -225,6 +248,10 @@ void loop() {
   LoadCell.update();
 #endif
 
+#ifdef GYRO
+  gyro.read();
+#endif
+
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
@@ -240,6 +267,17 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       float data = measure_distance();
       Serial.print("Distance: ");
       Serial.println(data);
+    #endif
+
+    #ifdef GYRO
+      Serial.print("G ");
+      Serial.print("X: ");
+      Serial.print((int)gyro.g.x);
+      Serial.print(" Y: ");
+      Serial.print((int)gyro.g.y);
+      Serial.print(" Z: ");
+      Serial.println((int)gyro.g.z);
+      int data = (int)gyro.g.x;
     #endif
 
     String data_topic = topic + "/data";
@@ -298,6 +336,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef WEIGHT
         client.publish(type_topic_char, "weight");
       #endif
+      #ifdef GYRO
+        client.publish(type_topic_char, "gyro");
+      #endif
 
       // Print serial report
       String report;
@@ -313,6 +354,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       #ifdef WEIGHT
         report += "weight";
+      #endif
+      #ifdef GYRO
+        report += "gyro";
       #endif
       report += " , last compilation: ";
       report += comp_time;
