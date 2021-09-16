@@ -1,10 +1,10 @@
-#define VERSION "1.2.6"
+#define VERSION "1.2.8d"
 #define SENSOR_ID 1
 
 // #define PROXIMITY
 #define WEIGHT
 
-#define MQTT_TOPIC "dissolve/sensor/"
+#define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
 
 // #define OTA
@@ -14,7 +14,7 @@
 #define MQTT_REPORT
 
 #define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 1000
+#define SENSOR_RATE 500
 
 // LIBRARIES
 #include <Arduino.h>
@@ -39,10 +39,11 @@ extern "C"{
   #include <HX711_ADC.h>
 #endif
 
-#define LED 13            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
+#define sonoff_led_blue 13
+#define sonoff_led_red 12
+
 #define LED_ESP 2
 
-// #define SONOFF_LED1 13 //
 // TODO add MQTT subscription for relay control
 // #define SONOFF_LED2 12 // relay
 
@@ -135,8 +136,12 @@ void setup() {
   LoadCell.setCalFactor(calValue);
 #endif
 
-pinMode(LED, OUTPUT);    // LED pin as output.
+pinMode(sonoff_led_blue, OUTPUT);
+pinMode(sonoff_led_red, OUTPUT);
+digitalWrite(sonoff_led_red, HIGH);
 // pinMode(LED_ESP, OUTPUT);
+
+digitalWrite(sonoff_led_blue, HIGH);
 
 Serial.begin(115200);
 
@@ -206,6 +211,8 @@ while (!client.connected()) {
   // Defaults are 8080 and "/webota"
   webota.init(8888, "/update");
 #endif
+
+digitalWrite(sonoff_led_red, LOW);
 } // end of setup
 
 void loop() {
@@ -221,7 +228,7 @@ void loop() {
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
-    digitalWrite(LED, HIGH);
+    digitalWrite(sonoff_led_blue, LOW);
 
     #ifdef WEIGHT
       float data = LoadCell.getData();
@@ -242,12 +249,14 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     client.publish(data_topic_char, data_char);
     previousSensorTime = millis();
     block_report = false;
-    digitalWrite(LED, LOW);
+    digitalWrite(sonoff_led_blue, HIGH);
   }
 
 #ifdef MQTT_REPORT
   unsigned long reportDiff = millis() - previousReportTime;
     if((reportDiff > reportInterval) && !block_report){
+
+      digitalWrite(sonoff_led_blue, LOW);
 
       String version_topic = topic + "/sys/ver";
       const char * version_topic_char = version_topic.c_str();
@@ -309,6 +318,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       report += comp_time;
       Serial.println(report);
 
+      digitalWrite(sonoff_led_blue, HIGH);
       // previousReportTime += reportDiff;
       previousReportTime = millis();
     }
