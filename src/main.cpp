@@ -1,8 +1,8 @@
-#define VERSION "1.2.4"
+#define VERSION "1.2.6"
 #define SENSOR_ID 1
 
-#define PROXIMITY
-// #define WEIGHT
+// #define PROXIMITY
+#define WEIGHT
 
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -54,8 +54,8 @@ extern "C"{
 
 #ifdef WEIGHT
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define sda_pin 4 //D2 SDA
-  #define clk_pin 14//D5 SCLK
+  #define sda_pin 4 //D2 SDA - orange/white
+  #define clk_pin 14//D5 SCLK - blue/white
 #endif
 
 #ifdef MQTT_REPORT
@@ -80,6 +80,12 @@ String topic = topicPrefix + unit_id;
 
 bool block_report = false;
 
+
+#ifdef WEIGHT
+  HX711_ADC LoadCell(sda_pin, clk_pin);
+  long t;
+#endif
+
 // functions
 
 //TODO convert to human friendly texh HH:MM:SS?
@@ -87,17 +93,19 @@ int uptimeInSecs(){
   return (int)(millis()/1000);
 }
 
-float measure_distance(){
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
+#ifdef PROXIMITY
+  float measure_distance(){
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
 
-  float duration = pulseIn(echoPin, HIGH);
-  float distance = (duration*.0343)/2;
-  return distance;
-}
+    float duration = pulseIn(echoPin, HIGH);
+    float distance = (duration*.0343)/2;
+    return distance;
+  }
+#endif
 
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived in topic: ");
@@ -115,11 +123,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void setup() {
 // sensor setup
-pinMode(trigPin, OUTPUT);
-pinMode(echoPin, INPUT);
+#ifdef PROXIMITY
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+#endif
+
+#ifdef WEIGHT
+  float calValue = 696;             // calibration value, depends on your individual load cell setup
+  LoadCell.begin();                 // start connection to load cell module
+  LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
+  LoadCell.setCalFactor(calValue);
+#endif
 
 pinMode(LED, OUTPUT);    // LED pin as output.
-pinMode(LED_ESP, OUTPUT);
+// pinMode(LED_ESP, OUTPUT);
 
 Serial.begin(115200);
 
@@ -189,7 +206,6 @@ while (!client.connected()) {
   // Defaults are 8080 and "/webota"
   webota.init(8888, "/update");
 #endif
-
 } // end of setup
 
 void loop() {
@@ -198,26 +214,40 @@ void loop() {
   webota.handle();
 #endif
 
+#ifdef WEIGHT
+  LoadCell.update();
+#endif
+
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
-    float proximity = measure_distance();
-    Serial.print("Distance: ");
-    Serial.println(proximity);
+    digitalWrite(LED, HIGH);
 
-    String proximity_topic = topic + "/data";
-    const char * proximity_topic_char = proximity_topic.c_str();
-    char prox_char[8];
-    itoa(proximity, prox_char, 10);
-    client.publish(proximity_topic_char, prox_char);
+    #ifdef WEIGHT
+      float data = LoadCell.getData();
+      Serial.print("Weight: ");
+      Serial.println(data);
+    #endif
+
+    #ifdef PROXIMITY
+      float data = measure_distance();
+      Serial.print("Distance: ");
+      Serial.println(data);
+    #endif
+
+    String data_topic = topic + "/data";
+    const char * data_topic_char = data_topic.c_str();
+    char data_char[8];
+    itoa(data, data_char, 10);
+    client.publish(data_topic_char, data_char);
     previousSensorTime = millis();
     block_report = false;
+    digitalWrite(LED, LOW);
   }
 
 #ifdef MQTT_REPORT
   unsigned long reportDiff = millis() - previousReportTime;
     if((reportDiff > reportInterval) && !block_report){
-      digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
 
       String version_topic = topic + "/sys/ver";
       const char * version_topic_char = version_topic.c_str();
@@ -256,6 +286,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef PROXIMITY
         client.publish(type_topic_char, "proximity");
       #endif
+      #ifdef WEIGHT
+        client.publish(type_topic_char, "weight");
+      #endif
 
       // Print serial report
       String report;
@@ -268,6 +301,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       report += ", type: ";
       #ifdef PROXIMITY
         report += "proximity";
+      #endif
+      #ifdef WEIGHT
+        report += "weight";
       #endif
       report += " , last compilation: ";
       report += comp_time;
