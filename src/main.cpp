@@ -1,7 +1,8 @@
-#define VERSION "1.2.2"
+#define VERSION "1.2.3"
 #define SENSOR_ID 1
-// #define SENSOR_TYPE "proximity"
+
 #define PROXIMITY
+
 #define MQTT_TOPIC "dissolve/sensor/"
 // TODO set default sensor and sys data sampling rate
 
@@ -254,7 +255,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       report += ", rssi: ";
       report += rssichar;
       report += ", type: ";
-      report += type;
+      #ifdef PROXIMITY
+        report += "proximity";
+      #endif
       report += " , last compilation: ";
       report += comp_time;
       Serial.println(report);
