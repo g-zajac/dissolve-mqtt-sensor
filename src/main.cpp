@@ -3,7 +3,8 @@
 
 // #define PROXIMITY
 // #define WEIGHT
-#define GYRO
+// #define GYRO
+#define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -46,6 +47,13 @@ extern "C"{
   L3G gyro;
 #endif
 
+#ifdef THERMAL_CAMERA
+  #include <Adafruit_AMG88xx.h>
+  #include <SPI.h>
+  Adafruit_AMG88xx amg;
+#endif
+
+
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
 
@@ -70,6 +78,10 @@ extern "C"{
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
   #define sda_pin 4 //D2 SDA - orange/white
   #define clk_pin 14//D5 SCLK - blue/white
+#endif
+
+#ifdef THERMAL_CAMERA
+  float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
 
 #ifdef MQTT_REPORT
@@ -159,6 +171,16 @@ void setup() {
   gyro.enableDefault();
 #endif
 
+#ifdef THERMAL_CAMERA
+  bool status;
+  // default settings
+  status = amg.begin();
+  if (!status) {
+      Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
+      while (1);
+  }
+#endif
+
 pinMode(sonoff_led_blue, OUTPUT);
 pinMode(sonoff_led_red, OUTPUT);
 digitalWrite(sonoff_led_red, HIGH);
@@ -204,6 +226,7 @@ Serial.println(WiFi.localIP());
 client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
 
+// TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
     if (client.connect("ESP8266Client")) {
@@ -252,6 +275,7 @@ void loop() {
   gyro.read();
 #endif
 
+
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
@@ -280,11 +304,32 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       int data = (int)gyro.g.x;
     #endif
 
+    #ifdef THERMAL_CAMERA
+      String image = "";
+      amg.readPixels(pixels);
+
+      Serial.print("[");
+      for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
+        image = image + pixels[i-1] + ",";
+        Serial.print(pixels[i-1]);
+        Serial.print(", ");
+        if( i%8 == 0 ) Serial.println();
+      }
+      image = image.substring(0, image.length() -1);
+      Serial.println("]");
+      Serial.println();
+    #endif
+
     String data_topic = topic + "/data";
     const char * data_topic_char = data_topic.c_str();
-    char data_char[8];
-    itoa(data, data_char, 10);
-    client.publish(data_topic_char, data_char);
+    #ifndef THERMAL_CAMERA
+      char data_char[8];
+      itoa(data, data_char, 10);
+      client.publish(data_topic_char, data_char);
+    #endif
+    #ifdef THERMAL_CAMERA
+      client.publish(data_topic_char, image.c_str());
+    #endif
     previousSensorTime = millis();
     block_report = false;
     digitalWrite(sonoff_led_blue, HIGH);
@@ -339,6 +384,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef GYRO
         client.publish(type_topic_char, "gyro");
       #endif
+      #ifdef THERMAL_CAMERA
+        client.publish(type_topic_char, "thermal-camera");
+      #endif
 
       // Print serial report
       String report;
@@ -357,6 +405,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       #ifdef GYRO
         report += "gyro";
+      #endif
+      #ifdef THERMAL_CAMERA
+        report += "thermal-camera";
       #endif
       report += " , last compilation: ";
       report += comp_time;
