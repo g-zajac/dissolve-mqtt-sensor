@@ -1,4 +1,4 @@
-#define VERSION "1.2.8d"
+#define VERSION "1.2.9b"
 #define SENSOR_ID 1
 
 // #define PROXIMITY
@@ -16,7 +16,7 @@
 #define MQTT_REPORT
 
 #define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 500
+#define SENSOR_RATE 1000
 
 // LIBRARIES
 #include <Arduino.h>
@@ -81,6 +81,9 @@ extern "C"{
 #endif
 
 #ifdef THERMAL_CAMERA
+  #define AMG_COLS 8
+  #define AMG_ROWS 8
+  // float pixels[AMG_COLS * AMG_ROWS];
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
 
@@ -229,8 +232,11 @@ client.setCallback(callback);
 // TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
-    if (client.connect("ESP8266Client")) {
+    // TODO add sensor type and id to name
+    if (client.connect("esp8266-amg")) {
       Serial.println("connected");
+      client.setKeepAlive(60);  // keep alive for 60secs
+      Serial.println("set alive for 60 secs");
     } else {
       Serial.print("failed with state ");
       Serial.print(client.state());
@@ -308,28 +314,38 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       String image = "";
       amg.readPixels(pixels);
 
-      Serial.print("[");
+      // Serial.print("[");
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
         image = image + pixels[i-1] + ",";
-        Serial.print(pixels[i-1]);
-        Serial.print(", ");
+        // Serial.print(pixels[i-1]);
+        // Serial.print(", ");
         if( i%8 == 0 ) Serial.println();
       }
       image = image.substring(0, image.length() -1);
-      Serial.println("]");
-      Serial.println();
+      // Serial.println("]");
+      // Serial.println();
     #endif
 
     String data_topic = topic + "/data";
     const char * data_topic_char = data_topic.c_str();
+
     #ifndef THERMAL_CAMERA
       char data_char[8];
       itoa(data, data_char, 10);
       client.publish(data_topic_char, data_char);
     #endif
+
+    // TOD fix data issue, check MQTT limits
     #ifdef THERMAL_CAMERA
+      Serial.print("publishing thermal camera mqtt topic: ");
+      Serial.println(data_topic_char);
+      Serial.print("Array size: "); Serial.println(AMG88xx_PIXEL_ARRAY_SIZE);
+      Serial.println("payload: ");
+      Serial.println(image);
       client.publish(data_topic_char, image.c_str());
+      // client.publish(data_topic_char, "dupa");
     #endif
+
     previousSensorTime = millis();
     block_report = false;
     digitalWrite(sonoff_led_blue, HIGH);
