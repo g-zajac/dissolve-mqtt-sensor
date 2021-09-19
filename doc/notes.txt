@@ -31,3 +31,6 @@ PROXIMITY
 GYRO
 https://www.pololu.com/product/2468
 MinIMU-9 v3 Gyro, Accelerometer, and Compass (L3GD20H and LSM303D Carrier)
+
+
+earasing esp: pio run -t erase
