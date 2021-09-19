@@ -1,4 +1,4 @@
-#define VERSION "1.2.9b"
+#define VERSION "1.3.0"
 #define SENSOR_ID 1
 
 // #define PROXIMITY
@@ -49,6 +49,7 @@ extern "C"{
 
 #ifdef THERMAL_CAMERA
   #include <Adafruit_AMG88xx.h>
+  #include <Wire.h>
   #include <SPI.h>
   Adafruit_AMG88xx amg;
 #endif
@@ -81,8 +82,8 @@ extern "C"{
 #endif
 
 #ifdef THERMAL_CAMERA
-  #define AMG_COLS 8
-  #define AMG_ROWS 8
+  // #define AMG_COLS 8
+  // #define AMG_ROWS 8
   // float pixels[AMG_COLS * AMG_ROWS];
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
@@ -108,7 +109,6 @@ String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + unit_id;
 
 bool block_report = false;
-
 
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
@@ -165,7 +165,8 @@ void setup() {
 #endif
 
 #ifdef GYRO
-  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin();
   if (!gyro.init())
   {
     Serial.println("Failed to autodetect gyro type!");
