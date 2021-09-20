@@ -4,7 +4,8 @@
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-#define THERMAL_CAMERA
+#define GYRO_DEBUG
+// #define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -47,13 +48,18 @@ extern "C"{
   L3G gyro;
 #endif
 
+#ifdef GYRO_DEBUG
+  #include <Wire.h>
+  #include <L3G.h>
+  L3G gyro;
+#endif
+
 #ifdef THERMAL_CAMERA
   #include <Adafruit_AMG88xx.h>
   #include <Wire.h>
   #include <SPI.h>
   Adafruit_AMG88xx amg;
 #endif
-
 
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
@@ -76,6 +82,12 @@ extern "C"{
 #endif
 
 #ifdef GYRO
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define sda_pin 4 //D2 SDA - orange/white
+  #define clk_pin 14//D5 SCLK - blue/white
+#endif
+
+#ifdef GYRO_DEBUG
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
   #define sda_pin 4 //D2 SDA - orange/white
   #define clk_pin 14//D5 SCLK - blue/white
@@ -165,14 +177,26 @@ void setup() {
 #endif
 
 #ifdef GYRO
-  // Wire.begin(sda_pin, clk_pin);
-  Wire.begin();
+  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin();
   if (!gyro.init())
   {
     Serial.println("Failed to autodetect gyro type!");
     while (1);
   }
   gyro.enableDefault();
+#endif
+
+#ifdef GYRO_DEBUG
+  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin();
+  if (!gyro.init())
+  {
+    Serial.println("Failed to autodetect gyro type!");
+    while (1);
+  }
+  gyro.enableDefault();
+  Serial.println("gyro connected");
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -311,6 +335,10 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       int data = (int)gyro.g.x;
     #endif
 
+    #ifdef GYRO_DEBUG
+      int data = 100;
+    #endif
+
     #ifdef THERMAL_CAMERA
       String image = "";
       amg.readPixels(pixels);
@@ -401,6 +429,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef GYRO
         client.publish(type_topic_char, "gyro");
       #endif
+      #ifdef GYRO_DEBUG
+        client.publish(type_topic_char, "GYRO_DEBUG");
+      #endif
       #ifdef THERMAL_CAMERA
         client.publish(type_topic_char, "thermal-camera");
       #endif
@@ -422,6 +453,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       #ifdef GYRO
         report += "gyro";
+      #endif
+      #ifdef GYRO_DEBUG
+        report += "GYRO_DEBUG";
       #endif
       #ifdef THERMAL_CAMERA
         report += "thermal-camera";
