@@ -1,4 +1,4 @@
-#define VERSION "1.3.1a"
+#define VERSION "1.3.1b"
 #define SENSOR_ID 1
 
 // #define PROXIMITY
@@ -288,6 +288,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     block_report = true;
     digitalWrite(sonoff_led_blue, LOW);
 
+    String data_topic = topic + "/data";
+    const char * data_topic_char = data_topic.c_str();
+
     #ifdef WEIGHT
       float data = LoadCell.getData();
       Serial.print("Weight: ");
@@ -308,7 +311,13 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       Serial.print((int)gyro.g.y);
       Serial.print(" Z: ");
       Serial.println((int)gyro.g.z);
-      int data = (int)gyro.g.x;
+
+      int dataX = (int)gyro.g.x;
+      int dataY = (int)gyro.g.y;
+      int dataZ = (int)gyro.g.z;
+
+      String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
+      client.publish(data_topic_char, gyro_data.c_str());
     #endif
 
     #ifdef THERMAL_CAMERA
@@ -327,10 +336,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       // Serial.println();
     #endif
 
-    String data_topic = topic + "/data";
-    const char * data_topic_char = data_topic.c_str();
-
-    #ifndef THERMAL_CAMERA
+    #if defined(PROXIMITY) || defined(WEIGHT)
       char data_char[8];
       itoa(data, data_char, 10);
       client.publish(data_topic_char, data_char);
