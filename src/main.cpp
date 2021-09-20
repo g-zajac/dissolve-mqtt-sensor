@@ -1,10 +1,9 @@
-#define VERSION "1.3.0"
+#define VERSION "1.3.1a"
 #define SENSOR_ID 1
 
 // #define PROXIMITY
 // #define WEIGHT
-// #define GYRO
-#define GYRO_DEBUG
+#define GYRO
 // #define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
@@ -48,12 +47,6 @@ extern "C"{
   L3G gyro;
 #endif
 
-#ifdef GYRO_DEBUG
-  #include <Wire.h>
-  #include <L3G.h>
-  L3G gyro;
-#endif
-
 #ifdef THERMAL_CAMERA
   #include <Adafruit_AMG88xx.h>
   #include <Wire.h>
@@ -82,12 +75,6 @@ extern "C"{
 #endif
 
 #ifdef GYRO
-  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define sda_pin 4 //D2 SDA - orange/white
-  #define clk_pin 14//D5 SCLK - blue/white
-#endif
-
-#ifdef GYRO_DEBUG
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
   #define sda_pin 4 //D2 SDA - orange/white
   #define clk_pin 14//D5 SCLK - blue/white
@@ -163,52 +150,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void setup() {
-// sensor setup
-#ifdef PROXIMITY
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-#endif
-
-#ifdef WEIGHT
-  float calValue = 696;             // calibration value, depends on your individual load cell setup
-  LoadCell.begin();                 // start connection to load cell module
-  LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
-  LoadCell.setCalFactor(calValue);
-#endif
-
-#ifdef GYRO
-  Wire.begin(sda_pin, clk_pin);
-  // Wire.begin();
-  if (!gyro.init())
-  {
-    Serial.println("Failed to autodetect gyro type!");
-    while (1);
-  }
-  gyro.enableDefault();
-#endif
-
-#ifdef GYRO_DEBUG
-  Wire.begin(sda_pin, clk_pin);
-  // Wire.begin();
-  if (!gyro.init())
-  {
-    Serial.println("Failed to autodetect gyro type!");
-    while (1);
-  }
-  gyro.enableDefault();
-  Serial.println("gyro connected");
-#endif
-
-#ifdef THERMAL_CAMERA
-  bool status;
-  // default settings
-  status = amg.begin();
-  if (!status) {
-      Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
-      while (1);
-  }
-#endif
-
 pinMode(sonoff_led_blue, OUTPUT);
 pinMode(sonoff_led_red, OUTPUT);
 digitalWrite(sonoff_led_red, HIGH);
@@ -237,6 +178,42 @@ Serial.begin(115200);
   Serial.print( F("Vcc: ") ); Serial.println(ESP.getVcc());
   Serial.println();
 #endif
+
+// sensor setup
+#ifdef PROXIMITY
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+#endif
+
+#ifdef WEIGHT
+  float calValue = 696;             // calibration value, depends on your individual load cell setup
+  LoadCell.begin();                 // start connection to load cell module
+  LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
+  LoadCell.setCalFactor(calValue);
+#endif
+
+#ifdef GYRO
+  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin();
+  if (!gyro.init())
+  {
+    Serial.println("Failed to autodetect gyro type!");
+    while (1);
+  }
+  gyro.enableDefault();
+  Serial.println("gyro connected");
+#endif
+
+#ifdef THERMAL_CAMERA
+  bool status;
+  // default settings
+  status = amg.begin();
+  if (!status) {
+      Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
+      while (1);
+  }
+#endif
+
 
 WiFi.begin(mySSID, myPASSWORD);
 
@@ -306,7 +283,6 @@ void loop() {
   gyro.read();
 #endif
 
-
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
@@ -333,10 +309,6 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       Serial.print(" Z: ");
       Serial.println((int)gyro.g.z);
       int data = (int)gyro.g.x;
-    #endif
-
-    #ifdef GYRO_DEBUG
-      int data = 100;
     #endif
 
     #ifdef THERMAL_CAMERA
@@ -429,9 +401,6 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef GYRO
         client.publish(type_topic_char, "gyro");
       #endif
-      #ifdef GYRO_DEBUG
-        client.publish(type_topic_char, "GYRO_DEBUG");
-      #endif
       #ifdef THERMAL_CAMERA
         client.publish(type_topic_char, "thermal-camera");
       #endif
@@ -453,9 +422,6 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       #ifdef GYRO
         report += "gyro";
-      #endif
-      #ifdef GYRO_DEBUG
-        report += "GYRO_DEBUG";
       #endif
       #ifdef THERMAL_CAMERA
         report += "thermal-camera";
