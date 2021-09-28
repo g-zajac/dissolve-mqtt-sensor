@@ -1,9 +1,10 @@
 #define VERSION "1.3.1b"
 #define SENSOR_ID 1
 
+#define TEST            // no sensor, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
-#define GYRO
+// #define GYRO
 // #define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
@@ -336,7 +337,13 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       // Serial.println();
     #endif
 
-    #if defined(PROXIMITY) || defined(WEIGHT)
+    #ifdef TEST
+      float data = random(0,100);
+      Serial.print("Test value: ");
+      Serial.println(data);
+    #endif
+
+    #if defined(PROXIMITY) || defined(WEIGHT) || defined(TEST)
       char data_char[8];
       itoa(data, data_char, 10);
       client.publish(data_topic_char, data_char);
@@ -410,6 +417,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef THERMAL_CAMERA
         client.publish(type_topic_char, "thermal-camera");
       #endif
+      #ifdef TEST
+        client.publish(type_topic_char, "test");
+      #endif
 
       // Print serial report
       String report;
@@ -431,6 +441,9 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       #ifdef THERMAL_CAMERA
         report += "thermal-camera";
+      #endif
+      #ifdef TEST
+        report += "test";
       #endif
       report += " , last compilation: ";
       report += comp_time;
