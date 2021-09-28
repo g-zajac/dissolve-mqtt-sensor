@@ -1,3 +1,36 @@
 Sonoff TH mem chip: P25080H
 
 Common sizes are 512 kB (4Mbit), 1 MB (8Mbit) and 4 MB
+
+
+Sonoff:
+
+Connecting....
+Chip is ESP8266EX
+Features: WiFi
+Crystal is 26MHz
+MAC: 8c:aa:b5:66:26:89
+Auto-detected: /dev/cu.usbserial-A5XK3RJT
+
+
+WebOTA 2
+curl -F "file=@MyImage.bin" http://esp-ota.local:8080/webota
+
+pinmap
+https://tinkerman.cat/post/sonoff-th10-th16-sensors-displays-actuators/
+
+
+PROXIMITY
++ orange
+- blue
+
+ GPIO14 blue/white - echo
+ GPIO4 orange/white - triger
+
+
+GYRO
+https://www.pololu.com/product/2468
+MinIMU-9 v3 Gyro, Accelerometer, and Compass (L3GD20H and LSM303D Carrier)
+
+
+earasing esp: pio run -t erase

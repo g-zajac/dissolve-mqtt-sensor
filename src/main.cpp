@@ -1,15 +1,23 @@
-#define VERSION "1.1.7"
+#define VERSION "1.3.1b"
 #define SENSOR_ID 1
-#define SENSOR_TYPE "proximity"
-#define MQTT_TOPIC "dissolve/sensor/"
+
+#define TEST            // no sensor, just sends random values
+// #define PROXIMITY
+// #define WEIGHT
+// #define GYRO
+// #define THERMAL_CAMERA
+
+#define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
 
-#define OTA
+// #define OTA
+#define OTA2
+
 #define SERIAL_DEBUG
 #define MQTT_REPORT
 
 #define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 500
+#define SENSOR_RATE 1000
 
 // LIBRARIES
 #include <Arduino.h>
@@ -26,15 +34,59 @@ extern "C"{
   #include <AsyncElegantOTA.h>
 #endif
 
-#define LED 16            // Led in NodeMCU at pin GPIO16 (D0). gpio2 ESP8266 led
+#ifdef OTA2
+  #include <WebOTA.h>
+#endif
+
+#ifdef WEIGHT
+  #include <HX711_ADC.h>
+#endif
+
+#ifdef GYRO
+  #include <Wire.h>
+  #include <L3G.h>
+  L3G gyro;
+#endif
+
+#ifdef THERMAL_CAMERA
+  #include <Adafruit_AMG88xx.h>
+  #include <Wire.h>
+  #include <SPI.h>
+  Adafruit_AMG88xx amg;
+#endif
+
+#define sonoff_led_blue 13
+#define sonoff_led_red 12
+
 #define LED_ESP 2
 
-#define SONOFF_LED1 13 //
-#define SONOFF_LED2 12 // relay
+// TODO add MQTT subscription for relay control
+// #define SONOFF_LED2 12 // relay
 
-// sensors pin map (sonoff minijack avaliable pins: 4, 14);
-#define echoPin 4 //D2 SDA
-#define trigPin 14//D5 SCLK
+#ifdef PROXIMITY
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define trigPin 4 //D2 SDA
+  #define echoPin 14//D5 SCLK
+#endif
+
+#ifdef WEIGHT
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define sda_pin 4 //D2 SDA - orange/white
+  #define clk_pin 14//D5 SCLK - blue/white
+#endif
+
+#ifdef GYRO
+  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
+  #define sda_pin 4 //D2 SDA - orange/white
+  #define clk_pin 14//D5 SCLK - blue/white
+#endif
+
+#ifdef THERMAL_CAMERA
+  // #define AMG_COLS 8
+  // #define AMG_ROWS 8
+  // float pixels[AMG_COLS * AMG_ROWS];
+  float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
+#endif
 
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -58,6 +110,11 @@ String topic = topicPrefix + unit_id;
 
 bool block_report = false;
 
+#ifdef WEIGHT
+  HX711_ADC LoadCell(sda_pin, clk_pin);
+  long t;
+#endif
+
 // functions
 
 //TODO convert to human friendly texh HH:MM:SS?
@@ -65,17 +122,19 @@ int uptimeInSecs(){
   return (int)(millis()/1000);
 }
 
-float measure_distance(){
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
+#ifdef PROXIMITY
+  float measure_distance(){
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
 
-  float duration = pulseIn(echoPin, HIGH);
-  float distance = (duration*.0343)/2;
-  return distance;
-}
+    float duration = pulseIn(echoPin, HIGH);
+    float distance = (duration*.0343)/2;
+    return distance;
+  }
+#endif
 
 void callback(char* topic, byte* payload, unsigned int length) {
   Serial.print("Message arrived in topic: ");
@@ -92,12 +151,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 
 void setup() {
-// sensor setup
-pinMode(trigPin, OUTPUT);
-pinMode(echoPin, INPUT);
+pinMode(sonoff_led_blue, OUTPUT);
+pinMode(sonoff_led_red, OUTPUT);
+digitalWrite(sonoff_led_red, HIGH);
+// pinMode(LED_ESP, OUTPUT);
 
-pinMode(LED, OUTPUT);    // LED pin as output.
-pinMode(LED_ESP, OUTPUT);
+digitalWrite(sonoff_led_blue, HIGH);
 
 Serial.begin(115200);
 
@@ -121,6 +180,42 @@ Serial.begin(115200);
   Serial.println();
 #endif
 
+// sensor setup
+#ifdef PROXIMITY
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+#endif
+
+#ifdef WEIGHT
+  float calValue = 696;             // calibration value, depends on your individual load cell setup
+  LoadCell.begin();                 // start connection to load cell module
+  LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
+  LoadCell.setCalFactor(calValue);
+#endif
+
+#ifdef GYRO
+  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin();
+  if (!gyro.init())
+  {
+    Serial.println("Failed to autodetect gyro type!");
+    while (1);
+  }
+  gyro.enableDefault();
+  Serial.println("gyro connected");
+#endif
+
+#ifdef THERMAL_CAMERA
+  bool status;
+  // default settings
+  status = amg.begin();
+  if (!status) {
+      Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
+      while (1);
+  }
+#endif
+
+
 WiFi.begin(mySSID, myPASSWORD);
 
 Serial.print("Connecting");
@@ -137,10 +232,14 @@ Serial.println(WiFi.localIP());
 client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
 
+// TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
     Serial.println("Connecting to MQTT...");
-    if (client.connect("ESP8266Client")) {
+    // TODO add sensor type and id to name
+    if (client.connect("esp8266-amg")) {
       Serial.println("connected");
+      client.setKeepAlive(60);  // keep alive for 60secs
+      Serial.println("set alive for 60 secs");
     } else {
       Serial.print("failed with state ");
       Serial.print(client.state());
@@ -162,30 +261,115 @@ while (!client.connected()) {
   digitalWrite(LED_ESP, LOW);
 #endif
 
+#ifdef OTA2
+  // To use a specific port and path uncomment this line
+  // Defaults are 8080 and "/webota"
+  webota.init(8888, "/update");
+#endif
+
+digitalWrite(sonoff_led_red, LOW);
 } // end of setup
 
 void loop() {
 
+#ifdef OTA2
+  webota.handle();
+#endif
+
+#ifdef WEIGHT
+  LoadCell.update();
+#endif
+
+#ifdef GYRO
+  gyro.read();
+#endif
+
 unsigned long sensorDiff = millis() - previousSensorTime;
   if(sensorDiff > sensorInterval) {
     block_report = true;
-    float proximity = measure_distance();
-    Serial.print("Distance: ");
-    Serial.println(proximity);
+    digitalWrite(sonoff_led_blue, LOW);
 
-    String proximity_topic = topic + "/data";
-    const char * proximity_topic_char = proximity_topic.c_str();
-    char prox_char[8];
-    itoa(proximity, prox_char, 10);
-    client.publish(proximity_topic_char, prox_char);
+    String data_topic = topic + "/data";
+    const char * data_topic_char = data_topic.c_str();
+
+    #ifdef WEIGHT
+      float data = LoadCell.getData();
+      Serial.print("Weight: ");
+      Serial.println(data);
+    #endif
+
+    #ifdef PROXIMITY
+      float data = measure_distance();
+      Serial.print("Distance: ");
+      Serial.println(data);
+    #endif
+
+    #ifdef GYRO
+      Serial.print("G ");
+      Serial.print("X: ");
+      Serial.print((int)gyro.g.x);
+      Serial.print(" Y: ");
+      Serial.print((int)gyro.g.y);
+      Serial.print(" Z: ");
+      Serial.println((int)gyro.g.z);
+
+      int dataX = (int)gyro.g.x;
+      int dataY = (int)gyro.g.y;
+      int dataZ = (int)gyro.g.z;
+
+      String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
+      client.publish(data_topic_char, gyro_data.c_str());
+    #endif
+
+    #ifdef THERMAL_CAMERA
+      String image = "";
+      amg.readPixels(pixels);
+
+      // Serial.print("[");
+      for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
+        image = image + pixels[i-1] + ",";
+        // Serial.print(pixels[i-1]);
+        // Serial.print(", ");
+        if( i%8 == 0 ) Serial.println();
+      }
+      image = image.substring(0, image.length() -1);
+      // Serial.println("]");
+      // Serial.println();
+    #endif
+
+    #ifdef TEST
+      float data = random(0,100);
+      Serial.print("Test value: ");
+      Serial.println(data);
+    #endif
+
+    #if defined(PROXIMITY) || defined(WEIGHT) || defined(TEST)
+      char data_char[8];
+      itoa(data, data_char, 10);
+      client.publish(data_topic_char, data_char);
+    #endif
+
+    // TOD fix data issue, check MQTT limits
+    #ifdef THERMAL_CAMERA
+      Serial.print("publishing thermal camera mqtt topic: ");
+      Serial.println(data_topic_char);
+      Serial.print("Array size: "); Serial.println(AMG88xx_PIXEL_ARRAY_SIZE);
+      Serial.println("payload: ");
+      Serial.println(image);
+      client.publish(data_topic_char, image.c_str());
+      // client.publish(data_topic_char, "dupa");
+    #endif
+
     previousSensorTime = millis();
     block_report = false;
+    digitalWrite(sonoff_led_blue, HIGH);
   }
 
 #ifdef MQTT_REPORT
   unsigned long reportDiff = millis() - previousReportTime;
     if((reportDiff > reportInterval) && !block_report){
-      digitalWrite(LED, !digitalRead(LED));  // Change the state of the LED
+
+      digitalWrite(sonoff_led_blue, LOW);
 
       String version_topic = topic + "/sys/ver";
       const char * version_topic_char = version_topic.c_str();
@@ -220,8 +404,22 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       String type_topic = topic + "/sys/type";
       const char * type_topic_char = type_topic.c_str();
-      const char * type = SENSOR_TYPE;
-      client.publish(type_topic_char, type);
+      // const char * type = SENSOR_TYPE;
+      #ifdef PROXIMITY
+        client.publish(type_topic_char, "proximity");
+      #endif
+      #ifdef WEIGHT
+        client.publish(type_topic_char, "weight");
+      #endif
+      #ifdef GYRO
+        client.publish(type_topic_char, "gyro");
+      #endif
+      #ifdef THERMAL_CAMERA
+        client.publish(type_topic_char, "thermal-camera");
+      #endif
+      #ifdef TEST
+        client.publish(type_topic_char, "test");
+      #endif
 
       // Print serial report
       String report;
@@ -232,11 +430,26 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       report += ", rssi: ";
       report += rssichar;
       report += ", type: ";
-      report += type;
+      #ifdef PROXIMITY
+        report += "proximity";
+      #endif
+      #ifdef WEIGHT
+        report += "weight";
+      #endif
+      #ifdef GYRO
+        report += "gyro";
+      #endif
+      #ifdef THERMAL_CAMERA
+        report += "thermal-camera";
+      #endif
+      #ifdef TEST
+        report += "test";
+      #endif
       report += " , last compilation: ";
       report += comp_time;
       Serial.println(report);
 
+      digitalWrite(sonoff_led_blue, HIGH);
       // previousReportTime += reportDiff;
       previousReportTime = millis();
     }
