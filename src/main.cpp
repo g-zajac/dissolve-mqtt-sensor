@@ -1,4 +1,4 @@
-#define VERSION "1.4.1"
+#define VERSION "1.4.2"
 #define SENSOR_ID 1
 
 #define SERIAL_DEBUG 1
@@ -35,6 +35,7 @@ extern "C"{
  #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
 }
 #include "credentials.h"
+#include <ArduinoJson.h>
 #include <PubSubClient.h>
 
 #ifdef OTA
@@ -346,12 +347,25 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     #ifdef TEST
-      float data = random(0,100);
-      debug("Test value: ");
-      debugln(data);
+      StaticJsonDocument<256> doc;
+      doc["sensor"] = "test";
+      doc["type"] = "test";
+      JsonArray data = doc.createNestedArray("data");
+
+      for (int i = 0; i < 10; i++){
+        data.add(random(0,100));
+      }
+
+      char out[128];
+      int b = serializeJson(doc, out);
+
+      debug("JSON Test value: ");
+      debugln(b);
+
+      client.publish(data_topic_char, out);
     #endif
 
-    #if defined(PROXIMITY) || defined(WEIGHT) || defined(TEST)
+    #if defined(PROXIMITY) || defined(WEIGHT)
       char data_char[8];
       itoa(data, data_char, 10);
       client.publish(data_topic_char, data_char);
