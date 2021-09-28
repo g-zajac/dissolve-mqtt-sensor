@@ -1,5 +1,7 @@
-#define VERSION "1.3.1b"
+#define VERSION "1.4.0"
 #define SENSOR_ID 1
+
+#define SERIAL_DEBUG 1
 
 #define TEST            // no sensor, just sends random values
 // #define PROXIMITY
@@ -13,7 +15,14 @@
 // #define OTA
 #define OTA2
 
-#define SERIAL_DEBUG
+#if SERIAL_DEBUG == 1
+  #define debug(x) Serial.print(x)
+  #define debugln(x) Serial.println(x)
+#else
+  #define debug(x)
+  #define debugln(x)
+#endif
+
 #define MQTT_REPORT
 
 #define REPORT_RATE 3000 // in ms
@@ -137,16 +146,16 @@ int uptimeInSecs(){
 #endif
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
+  debug("Message arrived in topic: ");
+  debugln(topic);
 
-  Serial.print("Message:");
+  debug("Message:");
   for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
+    debug((char)payload[i]);
   }
 
-  Serial.println();
-  Serial.println("-----------------------");
+  debugln();
+  debugln("-----------------------");
 }
 
 
@@ -160,25 +169,23 @@ digitalWrite(sonoff_led_blue, HIGH);
 
 Serial.begin(115200);
 
-#ifdef SERIAL_DEBUG
-  Serial.println("\r\n--------------------------------");        // compiling info
-  Serial.print("Ver: "); Serial.println(VERSION);
-  Serial.println("by Grzegorz Zajac");
-  Serial.println("Compiled: " __DATE__ ", " __TIME__ ", " __VERSION__);
-  Serial.println("---------------------------------");
-  Serial.println("ESP Info: ");
-  Serial.print( F("Heap: ") ); Serial.println(system_get_free_heap_size());
-  Serial.print( F("Boot Vers: ") ); Serial.println(system_get_boot_version());
-  Serial.print( F("CPU: ") ); Serial.println(system_get_cpu_freq());
-  Serial.print( F("SDK: ") ); Serial.println(system_get_sdk_version());
-  Serial.print( F("Chip ID: ") ); Serial.println(system_get_chip_id());
-  Serial.print( F("Flash ID: ") ); Serial.println(spi_flash_get_id());
-  Serial.print( F("Flash Size: ") ); Serial.println(ESP.getFlashChipRealSize());
-  Serial.printf("Sketch size: %u\n", ESP.getSketchSize());
-  Serial.printf("Free size: %u\n", ESP.getFreeSketchSpace());
-  Serial.print( F("Vcc: ") ); Serial.println(ESP.getVcc());
-  Serial.println();
-#endif
+debugln("\r\n---------------------------------------");        // compiling info
+debug("Ver: "); debugln(VERSION);
+debugln("by Grzegorz Zajac");
+debugln("Compiled: " __DATE__ ", " __TIME__ ", " __VERSION__);
+debugln("---------------------------------------");
+debugln("ESP Info: ");
+debug("Heap: " ); debugln(system_get_free_heap_size());
+debug("Boot Vers: "); debugln(system_get_boot_version());
+debug("CPU: "); debugln(system_get_cpu_freq());
+debug("SDK: "); debugln(system_get_sdk_version());
+debug("Chip ID: "); debugln(system_get_chip_id());
+debug("Flash ID: "); debugln(spi_flash_get_id());
+debug("Flash Size: "); debugln(ESP.getFlashChipRealSize());
+debug("Sketch size: "); debugln(ESP.getSketchSize());
+debug("Free size: "), debugln(ESP.getFreeSketchSpace());
+debug("Vcc: "); debugln(ESP.getVcc());
+debugln();
 
 // sensor setup
 #ifdef PROXIMITY
@@ -198,11 +205,11 @@ Serial.begin(115200);
   Wire.begin();
   if (!gyro.init())
   {
-    Serial.println("Failed to autodetect gyro type!");
+    debugln("Failed to autodetect gyro type!");
     while (1);
   }
   gyro.enableDefault();
-  Serial.println("gyro connected");
+  debugln("gyro connected");
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -210,7 +217,7 @@ Serial.begin(115200);
   // default settings
   status = amg.begin();
   if (!status) {
-      Serial.println("Could not find a valid AMG88xx sensor, check wiring!");
+      debugln("Could not find a valid AMG88xx sensor, check wiring!");
       while (1);
   }
 #endif
@@ -218,31 +225,31 @@ Serial.begin(115200);
 
 WiFi.begin(mySSID, myPASSWORD);
 
-Serial.print("Connecting");
+debug("Connecting");
 while (WiFi.status() != WL_CONNECTED)
 {
   delay(500);
-  Serial.print(".");
+  debug(".");
 }
-Serial.println();
+debugln();
 
-Serial.print("Connected, IP address: ");
-Serial.println(WiFi.localIP());
+debug("Connected, IP address: ");
+debugln(WiFi.localIP());
 
 client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
 
 // TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
-    Serial.println("Connecting to MQTT...");
+    debugln("Connecting to MQTT...");
     // TODO add sensor type and id to name
     if (client.connect("esp8266-amg")) {
-      Serial.println("connected");
+      debugln("connected");
       client.setKeepAlive(60);  // keep alive for 60secs
-      Serial.println("set alive for 60 secs");
+      debugln("set alive for 60 secs");
     } else {
-      Serial.print("failed with state ");
-      Serial.print(client.state());
+      debug("failed with state ");
+      debug(client.state());
       delay(2000);
     }
   }
@@ -257,7 +264,7 @@ while (!client.connected()) {
 
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     server.begin();
-    Serial.println("HTTP server started");
+    debugln("HTTP server started");
   digitalWrite(LED_ESP, LOW);
 #endif
 
@@ -294,24 +301,24 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
     #ifdef WEIGHT
       float data = LoadCell.getData();
-      Serial.print("Weight: ");
-      Serial.println(data);
+      debug("Weight: ");
+      debugln(data);
     #endif
 
     #ifdef PROXIMITY
       float data = measure_distance();
-      Serial.print("Distance: ");
-      Serial.println(data);
+      debug("Distance: ");
+      debugln(data);
     #endif
 
     #ifdef GYRO
-      Serial.print("G ");
-      Serial.print("X: ");
-      Serial.print((int)gyro.g.x);
-      Serial.print(" Y: ");
-      Serial.print((int)gyro.g.y);
-      Serial.print(" Z: ");
-      Serial.println((int)gyro.g.z);
+      debug("G ");
+      debug("X: ");
+      debug((int)gyro.g.x);
+      debug(" Y: ");
+      debug((int)gyro.g.y);
+      debug(" Z: ");
+      debugln((int)gyro.g.z);
 
       int dataX = (int)gyro.g.x;
       int dataY = (int)gyro.g.y;
@@ -325,22 +332,22 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       String image = "";
       amg.readPixels(pixels);
 
-      // Serial.print("[");
+      // debug("[");
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
         image = image + pixels[i-1] + ",";
-        // Serial.print(pixels[i-1]);
-        // Serial.print(", ");
-        if( i%8 == 0 ) Serial.println();
+        // debug(pixels[i-1]);
+        // debug(", ");
+        if( i%8 == 0 ) debugln();
       }
       image = image.substring(0, image.length() -1);
-      // Serial.println("]");
-      // Serial.println();
+      // debugln("]");
+      // debugln();
     #endif
 
     #ifdef TEST
       float data = random(0,100);
-      Serial.print("Test value: ");
-      Serial.println(data);
+      debug("Test value: ");
+      debugln(data);
     #endif
 
     #if defined(PROXIMITY) || defined(WEIGHT) || defined(TEST)
@@ -351,11 +358,11 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
     // TOD fix data issue, check MQTT limits
     #ifdef THERMAL_CAMERA
-      Serial.print("publishing thermal camera mqtt topic: ");
-      Serial.println(data_topic_char);
-      Serial.print("Array size: "); Serial.println(AMG88xx_PIXEL_ARRAY_SIZE);
-      Serial.println("payload: ");
-      Serial.println(image);
+      debug("publishing thermal camera mqtt topic: ");
+      debugln(data_topic_char);
+      debug("Array size: "); debugln(AMG88xx_PIXEL_ARRAY_SIZE);
+      debugln("payload: ");
+      debugln(image);
       client.publish(data_topic_char, image.c_str());
       // client.publish(data_topic_char, "dupa");
     #endif
@@ -447,7 +454,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #endif
       report += " , last compilation: ";
       report += comp_time;
-      Serial.println(report);
+      debugln(report);
 
       digitalWrite(sonoff_led_blue, HIGH);
       // previousReportTime += reportDiff;
