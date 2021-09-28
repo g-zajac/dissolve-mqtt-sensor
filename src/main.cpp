@@ -1,4 +1,4 @@
-#define VERSION "1.4.0"
+#define VERSION "1.4.1"
 #define SENSOR_ID 1
 
 #define SERIAL_DEBUG 1
@@ -183,8 +183,9 @@ debug("Chip ID: "); debugln(system_get_chip_id());
 debug("Flash ID: "); debugln(spi_flash_get_id());
 debug("Flash Size: "); debugln(ESP.getFlashChipRealSize());
 debug("Sketch size: "); debugln(ESP.getSketchSize());
-debug("Free size: "), debugln(ESP.getFreeSketchSpace());
+debug("Free size: "); debugln(ESP.getFreeSketchSpace());
 debug("Vcc: "); debugln(ESP.getVcc());
+debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
 // sensor setup
