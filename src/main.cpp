@@ -30,6 +30,8 @@
 
 // LIBRARIES
 #include <Arduino.h>
+#include "sensor_functions.h"
+
 #include <ESP8266WiFi.h>
 extern "C"{
  #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
@@ -186,6 +188,7 @@ debug("Flash Size: "); debugln(ESP.getFlashChipRealSize());
 debug("Sketch size: "); debugln(ESP.getSketchSize());
 debug("Free size: "); debugln(ESP.getFreeSketchSpace());
 debug("Vcc: "); debugln(ESP.getVcc());
+debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
