@@ -1,4 +1,4 @@
-#define VERSION "1.4.2"
+#define VERSION "1.4.3a"
 #define SENSOR_ID 1
 
 #define SERIAL_DEBUG 1
@@ -349,7 +349,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #ifdef TEST
       StaticJsonDocument<256> doc;
       doc["sensor"] = "test";
-      doc["type"] = "test";
+      doc["uptime"] = millis()/1000;
       JsonArray data = doc.createNestedArray("data");
 
       for (int i = 0; i < 10; i++){
