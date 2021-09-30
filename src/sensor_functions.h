@@ -5,11 +5,13 @@
 #include <Arduino.h>
 
 // blue print for object
-class TestLib{                                     // accesible
+class SnFn{                                     // accesible
   public:
     // Constructor with default value
-    TestLib(bool displayMsg=false);
+    SnFn(String sensorType="test");
 
+    String sensorType();
+    bool sensorInit();
     // Methods
     long getRandomNumber();
 
@@ -20,7 +22,7 @@ class TestLib{                                     // accesible
 
   // only in .cpp not in main sketch
   private:
-
+    String _sensorType;
 };
 
 #endif
