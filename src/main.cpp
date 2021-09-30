@@ -30,7 +30,11 @@
 
 // LIBRARIES
 #include <Arduino.h>
+
+// "" - the same folder <> lib folder
 #include "sensor_functions.h"
+TestLib test(true);
+
 
 #include <ESP8266WiFi.h>
 extern "C"{
@@ -227,6 +231,10 @@ debugln();
   }
 #endif
 
+#ifdef TEST
+  long rndNo = test.getRandomNumber();
+  debug("Lib test: "); debugln(rndNo);
+#endif
 
 WiFi.begin(mySSID, myPASSWORD);
 
