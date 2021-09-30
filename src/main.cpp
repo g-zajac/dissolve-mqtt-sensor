@@ -33,7 +33,7 @@
 
 // "" - the same folder <> lib folder
 #include "sensor_functions.h"
-TestLib test(true);
+SnFn selectedSensor("dupa");
 
 
 #include <ESP8266WiFi.h>
@@ -52,6 +52,10 @@ extern "C"{
 
 #ifdef OTA2
   #include <WebOTA.h>
+#endif
+
+#ifdef TEST
+  //
 #endif
 
 #ifdef WEIGHT
@@ -74,7 +78,7 @@ extern "C"{
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
 
-#define LED_ESP 2
+// #define LED_ESP 2
 
 // TODO add MQTT subscription for relay control
 // #define SONOFF_LED2 12 // relay
@@ -196,6 +200,14 @@ debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
+#ifdef TEST
+  long rndNo = selectedSensor.getRandomNumber();
+  debug("Random number: "); debugln(rndNo);
+  // SnFn.sensorInit();
+  String type = selectedSensor.sensorType();
+  debug("Sensor type: "); debugln(type);
+#endif
+
 // sensor setup
 #ifdef PROXIMITY
   pinMode(trigPin, OUTPUT);
@@ -229,11 +241,6 @@ debugln();
       debugln("Could not find a valid AMG88xx sensor, check wiring!");
       while (1);
   }
-#endif
-
-#ifdef TEST
-  long rndNo = test.getRandomNumber();
-  debug("Lib test: "); debugln(rndNo);
 #endif
 
 WiFi.begin(mySSID, myPASSWORD);
@@ -278,7 +285,7 @@ while (!client.connected()) {
     AsyncElegantOTA.begin(&server);    // Start ElegantOTA
     server.begin();
     debugln("HTTP server started");
-  digitalWrite(LED_ESP, LOW);
+  // digitalWrite(LED_ESP, LOW);
 #endif
 
 #ifdef OTA2
