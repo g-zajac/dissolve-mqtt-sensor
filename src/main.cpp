@@ -3,10 +3,10 @@
 
 #define SERIAL_DEBUG 1
 
-#define TEST            // no sensor, just sends random values
+// #define TEST            // no sensor, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
-// #define GYRO
+#define GYRO
 // #define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
@@ -33,7 +33,7 @@
 
 // "" - the same folder <> lib folder
 #include "sensor_functions.h"
-SnFn selectedSensor("dupa");
+SnFn sensor("dupa");
 
 
 #include <ESP8266WiFi.h>
@@ -41,7 +41,7 @@ extern "C"{
  #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
 }
 #include "credentials.h"
-#include <ArduinoJson.h>
+// #include <ArduinoJson.h>
 #include <PubSubClient.h>
 
 #ifdef OTA
@@ -54,18 +54,14 @@ extern "C"{
   #include <WebOTA.h>
 #endif
 
-#ifdef TEST
-  //
-#endif
-
 #ifdef WEIGHT
   #include <HX711_ADC.h>
 #endif
 
 #ifdef GYRO
-  #include <Wire.h>
-  #include <L3G.h>
-  L3G gyro;
+  // #include <Wire.h>
+  // #include <L3G.h>
+  // L3G gyro;
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -114,7 +110,7 @@ extern "C"{
 #endif
 
 unsigned long previousSensorTime = millis();
-const unsigned long sensorInterval = SENSOR_RATE;
+// const unsigned long sensorInterval = SENSOR_RATE;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -201,11 +197,16 @@ debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
 #ifdef TEST
-  long rndNo = selectedSensor.getRandomNumber();
+  sensor.importLib();
+
+  long rndNo = sensor.getRandomNumber();
   debug("Random number: "); debugln(rndNo);
   // SnFn.sensorInit();
-  String type = selectedSensor.sensorType();
+  String type = sensor.type();
   debug("Sensor type: "); debugln(type);
+
+  sensor.initialise();
+
 #endif
 
 // sensor setup
@@ -223,14 +224,14 @@ debugln();
 
 #ifdef GYRO
   // Wire.begin(sda_pin, clk_pin);
-  Wire.begin();
-  if (!gyro.init())
-  {
-    debugln("Failed to autodetect gyro type!");
-    while (1);
-  }
-  gyro.enableDefault();
-  debugln("gyro connected");
+  // Wire.begin();
+  // if (!gyro.init())
+  // {
+  //   debugln("Failed to autodetect gyro type!");
+  //   while (1);
+  // }
+  // gyro.enableDefault();
+  // debugln("gyro connected");
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -307,12 +308,15 @@ void loop() {
   LoadCell.update();
 #endif
 
-#ifdef GYRO
-  gyro.read();
-#endif
+// #ifdef GYRO
+//   gyro.read();
+// #endif
+sensor.read();
+
 
 unsigned long sensorDiff = millis() - previousSensorTime;
-  if(sensorDiff > sensorInterval) {
+  // if(sensorDiff > sensorInterval) {
+  if(sensorDiff > sensor.sampling()) {
     block_report = true;
     digitalWrite(sonoff_led_blue, LOW);
 
@@ -332,20 +336,23 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     #ifdef GYRO
-      debug("G ");
-      debug("X: ");
-      debug((int)gyro.g.x);
-      debug(" Y: ");
-      debug((int)gyro.g.y);
-      debug(" Z: ");
-      debugln((int)gyro.g.z);
+      Serial.print("OBJ Sensor data: ");
+      Serial.println(sensor.data());
 
-      int dataX = (int)gyro.g.x;
-      int dataY = (int)gyro.g.y;
-      int dataZ = (int)gyro.g.z;
-
-      String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
-      client.publish(data_topic_char, gyro_data.c_str());
+    //   debug("G ");
+    //   debug("X: ");
+    //   debug((int)gyro.g.x);
+    //   debug(" Y: ");
+    //   debug((int)gyro.g.y);
+    //   debug(" Z: ");
+    //   debugln((int)gyro.g.z);
+    //
+    //   int dataX = (int)gyro.g.x;
+    //   int dataY = (int)gyro.g.y;
+    //   int dataZ = (int)gyro.g.z;
+    //
+    //   String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
+    //   client.publish(data_topic_char, gyro_data.c_str());
     #endif
 
     #ifdef THERMAL_CAMERA
