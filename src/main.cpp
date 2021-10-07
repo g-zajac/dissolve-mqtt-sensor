@@ -1,13 +1,13 @@
-#define VERSION "1.4.2"
+#define VERSION "1.4.3a"
 #define SENSOR_ID 1
 
 #define SERIAL_DEBUG 1
 
-#define TEST            // no sensor, just sends random values
+// #define TEST            // no sensor, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -30,6 +30,12 @@
 
 // LIBRARIES
 #include <Arduino.h>
+
+// "" - the same folder <> lib folder
+// #include "sensor_functions.h"
+// TestLib test(true);
+
+
 #include <ESP8266WiFi.h>
 extern "C"{
  #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
@@ -186,6 +192,7 @@ debug("Flash Size: "); debugln(ESP.getFlashChipRealSize());
 debug("Sketch size: "); debugln(ESP.getSketchSize());
 debug("Free size: "); debugln(ESP.getFreeSketchSpace());
 debug("Vcc: "); debugln(ESP.getVcc());
+debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
@@ -224,6 +231,10 @@ debugln();
   }
 #endif
 
+// #ifdef TEST
+//   long rndNo = test.getRandomNumber();
+//   debug("Lib test: "); debugln(rndNo);
+// #endif
 
 WiFi.begin(mySSID, myPASSWORD);
 
@@ -331,25 +342,36 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     #ifdef THERMAL_CAMERA
+      StaticJsonDocument<512> doc;
+      // doc["sensor"] = "camera";
+      JsonArray data = doc.createNestedArray("data");
+
       String image = "";
       amg.readPixels(pixels);
 
       // debug("[");
+      int row = 0;
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
         image = image + pixels[i-1] + ",";
-        // debug(pixels[i-1]);
-        // debug(", ");
+        data.add(pixels[i-1]);
+        debug(pixels[i-1]);
+        debug(", ");
         if( i%8 == 0 ) debugln();
       }
       image = image.substring(0, image.length() -1);
-      // debugln("]");
-      // debugln();
+      debugln("]");
+      debugln();
+
+      char out[760];
+      serializeJson(doc, out);
+      client.publish(data_topic_char, out);
+
     #endif
 
     #ifdef TEST
       StaticJsonDocument<256> doc;
       doc["sensor"] = "test";
-      doc["type"] = "test";
+      doc["uptime"] = millis()/1000;
       JsonArray data = doc.createNestedArray("data");
 
       for (int i = 0; i < 10; i++){
@@ -372,15 +394,15 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     // TOD fix data issue, check MQTT limits
-    #ifdef THERMAL_CAMERA
-      debug("publishing thermal camera mqtt topic: ");
-      debugln(data_topic_char);
-      debug("Array size: "); debugln(AMG88xx_PIXEL_ARRAY_SIZE);
-      debugln("payload: ");
-      debugln(image);
-      client.publish(data_topic_char, image.c_str());
-      // client.publish(data_topic_char, "dupa");
-    #endif
+    // #ifdef THERMAL_CAMERA
+    //   debug("publishing thermal camera mqtt topic: ");
+    //   debugln(data_topic_char);
+    //   debug("Array size: "); debugln(AMG88xx_PIXEL_ARRAY_SIZE);
+    //   debugln("payload: ");
+    //   debugln(image);
+    //   client.publish(data_topic_char, image.c_str());
+    //   // client.publish(data_topic_char, "dupa");
+    // #endif
 
     previousSensorTime = millis();
     block_report = false;
@@ -393,36 +415,52 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       digitalWrite(sonoff_led_blue, LOW);
 
-      String version_topic = topic + "/sys/ver";
-      const char * version_topic_char = version_topic.c_str();
-      const char * version = VERSION;
-      client.publish(version_topic_char, version);
+      StaticJsonDocument<256> doc;
+      doc["version"] = VERSION;
 
-      String compilation_topic = topic + "/sys/comp";
-      const char * comp_topic_char = compilation_topic.c_str();
+      char out[256];
+      int b = serializeJson(doc, out);
+
+      debug("JSON Sys value: ");
+      debugln(b);
+      String version_topic = topic + "/sys/";
+      client.publish(version_topic, out);
+
+
+      // String version_topic = topic + "/sys/";
+      // const char * version_topic_char = version_topic.c_str();
+      // const char * version = VERSION;
+      // client.publish(version_topic_char, version);
+
+      // String compilation_topic = topic + "/sys/comp";
+      // const char * comp_topic_char = compilation_topic.c_str();
       char comp_time[24] = __DATE__ ;
       strcat(comp_time, " ");
       strcat(comp_time, __TIME__);
       const char * comp_time_char = comp_time;
-      client.publish(comp_topic_char, comp_time_char);
 
-      String rssi_topic = topic + "/sys/rssi";
-      const char * rssi_topic_char = rssi_topic.c_str();
-      int32_t rssi = WiFi.RSSI();
-      char rssichar[20];
-      itoa(rssi, rssichar, 10);
-      client.publish(rssi_topic_char, rssichar);
+      debug("comp time: ");
+      debugln(comp_time_char);
 
-      String ip_topic = topic + "/sys/ip";
-      const char * ip_topic_char = ip_topic.c_str();
-      const char* strLocalIp = WiFi.localIP().toString().c_str();
-      client.publish(ip_topic_char, strLocalIp);
-
-      String uptime_topic = topic + "/sys/uptime";
-      const char * uptime_topic_char = uptime_topic.c_str();
-      char uptime_char[10];
-      itoa(uptimeInSecs(), uptime_char, 10);
-      client.publish(uptime_topic_char, uptime_char);
+      // client.publish(comp_topic_char, comp_time_char);
+      //
+      // String rssi_topic = topic + "/sys/rssi";
+      // const char * rssi_topic_char = rssi_topic.c_str();
+      // int32_t rssi = WiFi.RSSI();
+      // char rssichar[20];
+      // itoa(rssi, rssichar, 10);
+      // client.publish(rssi_topic_char, rssichar);
+      //
+      // String ip_topic = topic + "/sys/ip";
+      // const char * ip_topic_char = ip_topic.c_str();
+      // const char* strLocalIp = WiFi.localIP().toString().c_str();
+      // client.publish(ip_topic_char, strLocalIp);
+      //
+      // String uptime_topic = topic + "/sys/uptime";
+      // const char * uptime_topic_char = uptime_topic.c_str();
+      // char uptime_char[10];
+      // itoa(uptimeInSecs(), uptime_char, 10);
+      // client.publish(uptime_topic_char, uptime_char);
 
       String type_topic = topic + "/sys/type";
       const char * type_topic_char = type_topic.c_str();
@@ -445,12 +483,12 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       // Print serial report
       String report;
-      report = "Ver: ";
-      report += version;
+      // report = "Ver: ";
+      // report += version;
       report += ", IP: ";
       report += WiFi.localIP().toString();
-      report += ", rssi: ";
-      report += rssichar;
+      // report += ", rssi: ";
+      // report += rssichar;
       report += ", type: ";
       #ifdef PROXIMITY
         report += "proximity";
