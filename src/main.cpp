@@ -1,5 +1,5 @@
 #define VERSION "1.4.3b"
-#define SENSOR_ID 1
+#define SENSOR_ID 01
 
 #define SERIAL_DEBUG 1
 
@@ -34,7 +34,6 @@
 // "" - the same folder <> lib folder
 // #include "sensor_functions.h"
 // TestLib test(true);
-
 
 #include <ESP8266WiFi.h>
 extern "C"{
@@ -119,17 +118,32 @@ PubSubClient client(espClient);
   AsyncWebServer server(80);
 #endif
 
-// form mqtt topic based on template and id
-String topicPrefix = MQTT_TOPIC;
-String unit_id = String(SENSOR_ID);
-String topic = topicPrefix + unit_id;
-
-bool block_report = false;
-
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
   long t;
 #endif
+
+// TODO move to lib, external object?
+#ifdef TEST
+  const String sensor_type = "test";
+#elif PROXIMITY
+  const String sensor_type = "proximity";
+#elif WEIGHT
+  const String sensor_type = "weight";
+#elif GYRO
+  const String sensor_type = "gyro";
+#elif THERMAL_CAMERA
+  const String sensor_type = "thermal_camera";
+#else
+  const String sensor_type = "none";
+#endif
+
+// form mqtt topic based on template and id
+String topicPrefix = MQTT_TOPIC;
+String unit_id = String(SENSOR_ID);
+String topic = topicPrefix + sensor_type + "/" + unit_id;
+
+bool block_report = false;
 
 // functions
 
@@ -309,8 +323,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     block_report = true;
     digitalWrite(sonoff_led_blue, LOW);
 
-    // String data_topic = topic + "/data";
-    // const char * data_topic_char = data_topic.c_str();
+    String data_topic = topic + "/data";
+    const char * data_topic_char = data_topic.c_str();
 
     #ifdef WEIGHT
       float data = LoadCell.getData();
@@ -384,8 +398,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       debug("JSON Test value: ");
       debugln(b);
 
-      // client.publish(data_topic_char, out);
-      client.publish("dupa/test", "dupa");
+      client.publish(data_topic_char, out);
+      // client.publish("dupa/test", "dupa");
     #endif
 
     #if defined(PROXIMITY) || defined(WEIGHT)
@@ -420,6 +434,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       StaticJsonDocument<256> doc;
       doc["version"] = VERSION;
+      //TODO add sub object json compilation - date and time
       doc["compilation_date"] = __DATE__ ;
       doc["compilation_time"] = __TIME__ ;
       //TODO optimise, read once in setup and use const, don't read every time!
@@ -451,7 +466,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       debug("JSON Sys value: ");
       debugln(b);
-      String version_topic_json = topic + "/sys_json/";
+      String version_topic_json = topic + "/sys/";
       const char * version_topic_json_char = version_topic_json.c_str();
       client.publish(version_topic_json_char, out);
 
@@ -500,30 +515,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       // Print serial report
       String report;
-      // report = "Ver: ";
-      // report += version;
-      report += ", IP: ";
-      report += WiFi.localIP().toString();
-      // report += ", rssi: ";
-      // report += rssichar;
-      report += ", type: ";
-      #ifdef PROXIMITY
-        report += "proximity";
-      #endif
-      #ifdef WEIGHT
-        report += "weight";
-      #endif
-      #ifdef GYRO
-        report += "gyro";
-      #endif
-      #ifdef THERMAL_CAMERA
-        report += "thermal-camera";
-      #endif
-      #ifdef TEST
-        report += "test";
-      #endif
-      // report += " , last compilation: ";
-      // report += comp_time;
+
       debugln(report);
 
       digitalWrite(sonoff_led_blue, HIGH);
