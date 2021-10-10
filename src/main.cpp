@@ -1,13 +1,13 @@
-#define VERSION "1.4.3a"
+#define VERSION "1.4.3b"
 #define SENSOR_ID 1
 
 #define SERIAL_DEBUG 1
 
-// #define TEST            // no sensor, just sends random values
+#define TEST            // no sensor, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-#define THERMAL_CAMERA
+// #define THERMAL_CAMERA
 
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
@@ -232,7 +232,7 @@ debugln();
 #endif
 
 // #ifdef TEST
-//   long rndNo = test.getRandomNumber();
+//   long rndNo = random(100);
 //   debug("Lib test: "); debugln(rndNo);
 // #endif
 
@@ -309,8 +309,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     block_report = true;
     digitalWrite(sonoff_led_blue, LOW);
 
-    String data_topic = topic + "/data";
-    const char * data_topic_char = data_topic.c_str();
+    // String data_topic = topic + "/data";
+    // const char * data_topic_char = data_topic.c_str();
 
     #ifdef WEIGHT
       float data = LoadCell.getData();
@@ -384,7 +384,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       debug("JSON Test value: ");
       debugln(b);
 
-      client.publish(data_topic_char, out);
+      // client.publish(data_topic_char, out);
+      client.publish("dupa/test", "dupa");
     #endif
 
     #if defined(PROXIMITY) || defined(WEIGHT)
@@ -415,32 +416,62 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       digitalWrite(sonoff_led_blue, LOW);
 
+      //==========================================
+
       StaticJsonDocument<256> doc;
       doc["version"] = VERSION;
+      doc["compilation_date"] = __DATE__ ;
+      doc["compilation_time"] = __TIME__ ;
+      //TODO optimise, read once in setup and use const, don't read every time!
+      doc["rssi"] = WiFi.RSSI();
+      doc["MAC"] = WiFi.macAddress();
+      doc["IP"] = WiFi.localIP();
+      doc["uptime"] = uptimeInSecs();
+
+      #ifdef PROXIMITY
+        const char* sensor_type = "proximity";
+      #endif
+      #ifdef WEIGHT
+      const char* sensor_type = "weight";
+      #endif
+      #ifdef GYRO
+        const char* sensor_type = "gyro";
+      #endif
+      #ifdef THERMAL_CAMERA
+        const char* sensor_type = "thermal-camera";
+      #endif
+      #ifdef TEST
+        const char* sensor_type = "test";
+      #endif
+
+      doc["type"] = sensor_type;
 
       char out[256];
       int b = serializeJson(doc, out);
 
       debug("JSON Sys value: ");
       debugln(b);
-      String version_topic = topic + "/sys/";
-      client.publish(version_topic, out);
+      String version_topic_json = topic + "/sys_json/";
+      const char * version_topic_json_char = version_topic_json.c_str();
+      client.publish(version_topic_json_char, out);
 
+
+      //==========================================
 
       // String version_topic = topic + "/sys/";
       // const char * version_topic_char = version_topic.c_str();
       // const char * version = VERSION;
       // client.publish(version_topic_char, version);
-
+      //
       // String compilation_topic = topic + "/sys/comp";
       // const char * comp_topic_char = compilation_topic.c_str();
-      char comp_time[24] = __DATE__ ;
-      strcat(comp_time, " ");
-      strcat(comp_time, __TIME__);
-      const char * comp_time_char = comp_time;
-
-      debug("comp time: ");
-      debugln(comp_time_char);
+      // char comp_time[24] = __DATE__ ;
+      // strcat(comp_time, " ");
+      // strcat(comp_time, __TIME__);
+      // const char * comp_time_char = comp_time;
+      //
+      // debug("comp time: ");
+      // debugln(comp_time_char);
 
       // client.publish(comp_topic_char, comp_time_char);
       //
@@ -462,24 +493,10 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       // itoa(uptimeInSecs(), uptime_char, 10);
       // client.publish(uptime_topic_char, uptime_char);
 
-      String type_topic = topic + "/sys/type";
-      const char * type_topic_char = type_topic.c_str();
+      // String type_topic = topic + "/sys/type";
+      // const char * type_topic_char = type_topic.c_str();
       // const char * type = SENSOR_TYPE;
-      #ifdef PROXIMITY
-        client.publish(type_topic_char, "proximity");
-      #endif
-      #ifdef WEIGHT
-        client.publish(type_topic_char, "weight");
-      #endif
-      #ifdef GYRO
-        client.publish(type_topic_char, "gyro");
-      #endif
-      #ifdef THERMAL_CAMERA
-        client.publish(type_topic_char, "thermal-camera");
-      #endif
-      #ifdef TEST
-        client.publish(type_topic_char, "test");
-      #endif
+
 
       // Print serial report
       String report;
@@ -505,8 +522,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       #ifdef TEST
         report += "test";
       #endif
-      report += " , last compilation: ";
-      report += comp_time;
+      // report += " , last compilation: ";
+      // report += comp_time;
       debugln(report);
 
       digitalWrite(sonoff_led_blue, HIGH);
