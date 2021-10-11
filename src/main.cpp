@@ -1,19 +1,33 @@
-#define VERSION "1.4.3d"
-#define SENSOR_ID 01
+#define VERSION "1.5.0"
 
-#define SERIAL_DEBUG 1
-
-#define TEST            // no sensor, just sends random values
+//------------------------------ SELECT SENSOR ---------------------------------
+#define TEST            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
 
+#define SENSOR_ID "01"
+//------------------------------------------------------------------------------
+
+// Sensors labels, used in MQTT topic, report, mDNS etc
+#define TEST_LABEL "test"
+#define PROXIMITY_LABEL "proximity"
+#define WEIGHT_LABEL "weight"
+#define GYRO_LABEL "gyro"
+#define THERMAL_CAMERA_LABEL "thermal_camera"
+
 #define MQTT_TOPIC "resonance/sensor/"
 // TODO set default sensor and sys data sampling rate
 
-// #define OTA
-#define OTA2
+#define SERIAL_DEBUG 1  // 0 off, 1 on
+#define OTA
+
+#define MQTT_REPORT
+
+#define REPORT_RATE 3000 // in ms
+#define SENSOR_RATE 1000
+
 
 #if SERIAL_DEBUG == 1
   #define debug(x) Serial.print(x)
@@ -23,12 +37,7 @@
   #define debugln(x)
 #endif
 
-#define MQTT_REPORT
-
-#define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 1000
-
-// LIBRARIES
+//---------------------------------- LIBRARIES ---------------------------------
 #include <Arduino.h>
 
 // "" - the same folder <> lib folder
@@ -45,12 +54,6 @@ extern "C"{
 #include <PubSubClient.h>
 
 #ifdef OTA
-  #include <ESPAsyncTCP.h>
-  #include <ESPAsyncWebServer.h>
-  #include <AsyncElegantOTA.h>
-#endif
-
-#ifdef OTA2
   #include <WebOTA.h>
 #endif
 
@@ -71,6 +74,7 @@ extern "C"{
   Adafruit_AMG88xx amg;
 #endif
 
+//--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
 
@@ -104,6 +108,7 @@ extern "C"{
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
 
+//------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
   const unsigned long reportInterval = REPORT_RATE;
@@ -115,18 +120,15 @@ const unsigned long sensorInterval = SENSOR_RATE;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-#ifdef OTA
-  AsyncWebServer server(80);
-#endif
-
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
   long t;
 #endif
 
+//------------------------------------------------------------------------------
 // TODO move to lib, external object?
 #ifdef TEST
-  const String sensor_type = "test";
+  const String sensor_type = TEST_LABEL;
 #elif PROXIMITY
   const String sensor_type = "proximity";
 #elif WEIGHT
@@ -148,7 +150,7 @@ String mDNSname = sensor_type + "-" + unit_id;
 
 bool block_report = false;
 
-// functions
+//--------------------------------- functions ----------------------------------
 
 //TODO convert to human friendly texh HH:MM:SS?
 int uptimeInSecs(){
@@ -182,6 +184,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("-----------------------");
 }
 
+//=================================== SETUP ====================================
 void setup() {
 pinMode(sonoff_led_blue, OUTPUT);
 pinMode(sonoff_led_red, OUTPUT);
@@ -212,7 +215,7 @@ debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
-// sensor setup
+//-------------------------------- sensor setup --------------------------------
 #ifdef PROXIMITY
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
@@ -246,11 +249,7 @@ debugln();
       while (1);
   }
 #endif
-
-// #ifdef TEST
-//   long rndNo = random(100);
-//   debug("Lib test: "); debugln(rndNo);
-// #endif
+//------------------------------------------------------------------------------
 
 WiFi.begin(mySSID, myPASSWORD);
 
@@ -292,18 +291,6 @@ while (!client.connected()) {
 // client.subscribe("esp/test");
 
 #ifdef OTA
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
-      // TODO add dynamic sensor name mDNSname.c_str()
-      request->send(200, "text/plain", "Hi! I am ESP8266.");
-    });
-
-    AsyncElegantOTA.begin(&server);    // Start ElegantOTA
-    server.begin();
-    debugln("HTTP server started");
-  digitalWrite(LED_ESP, LOW);
-#endif
-
-#ifdef OTA2
   // To use a specific port and path uncomment this line
   // Defaults are 8080 and "/webota"
   webota.init(8888, "/update");
@@ -312,9 +299,11 @@ while (!client.connected()) {
 digitalWrite(sonoff_led_red, LOW);
 } // end of setup
 
+//=================================== LOOP ====================================
+
 void loop() {
 
-#ifdef OTA2
+#ifdef OTA
   webota.handle();
 #endif
 
@@ -438,8 +427,6 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
       digitalWrite(sonoff_led_blue, LOW);
 
-      //==========================================
-
       StaticJsonDocument<256> doc;
       doc["version"] = VERSION;
       //TODO add sub object json compilation - date and time
@@ -452,19 +439,19 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       doc["uptime"] = uptimeInSecs();
 
       #ifdef PROXIMITY
-        const char* sensor_type = "proximity";
+        const char* sensor_type = PROXIMITY_LABEL;
       #endif
       #ifdef WEIGHT
-      const char* sensor_type = "weight";
+      const char* sensor_type = WEIGHT_LABEL;
       #endif
       #ifdef GYRO
-        const char* sensor_type = "gyro";
+        const char* sensor_type = GYRO_LABEL;
       #endif
       #ifdef THERMAL_CAMERA
-        const char* sensor_type = "thermal-camera";
+        const char* sensor_type = THERMAL_CAMERA_LABEL;
       #endif
       #ifdef TEST
-        const char* sensor_type = "test";
+        const char* sensor_type = TEST_LABEL;
       #endif
 
       doc["type"] = sensor_type;
@@ -472,59 +459,13 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       char out[256];
       int b = serializeJson(doc, out);
 
-      debug("JSON Sys value: ");
-      debugln(b);
       String version_topic_json = topic + "/sys/";
       const char * version_topic_json_char = version_topic_json.c_str();
       client.publish(version_topic_json_char, out);
 
-
-      //==========================================
-
-      // String version_topic = topic + "/sys/";
-      // const char * version_topic_char = version_topic.c_str();
-      // const char * version = VERSION;
-      // client.publish(version_topic_char, version);
-      //
-      // String compilation_topic = topic + "/sys/comp";
-      // const char * comp_topic_char = compilation_topic.c_str();
-      // char comp_time[24] = __DATE__ ;
-      // strcat(comp_time, " ");
-      // strcat(comp_time, __TIME__);
-      // const char * comp_time_char = comp_time;
-      //
-      // debug("comp time: ");
-      // debugln(comp_time_char);
-
-      // client.publish(comp_topic_char, comp_time_char);
-      //
-      // String rssi_topic = topic + "/sys/rssi";
-      // const char * rssi_topic_char = rssi_topic.c_str();
-      // int32_t rssi = WiFi.RSSI();
-      // char rssichar[20];
-      // itoa(rssi, rssichar, 10);
-      // client.publish(rssi_topic_char, rssichar);
-      //
-      // String ip_topic = topic + "/sys/ip";
-      // const char * ip_topic_char = ip_topic.c_str();
-      // const char* strLocalIp = WiFi.localIP().toString().c_str();
-      // client.publish(ip_topic_char, strLocalIp);
-      //
-      // String uptime_topic = topic + "/sys/uptime";
-      // const char * uptime_topic_char = uptime_topic.c_str();
-      // char uptime_char[10];
-      // itoa(uptimeInSecs(), uptime_char, 10);
-      // client.publish(uptime_topic_char, uptime_char);
-
-      // String type_topic = topic + "/sys/type";
-      // const char * type_topic_char = type_topic.c_str();
-      // const char * type = SENSOR_TYPE;
-
-
       // Print serial report
-      String report;
-
-      debugln(report);
+      // debug("sys report: "); debugln(out);
+      serializeJsonPretty(doc, Serial);
 
       digitalWrite(sonoff_led_blue, HIGH);
       // previousReportTime += reportDiff;
