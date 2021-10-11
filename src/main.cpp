@@ -354,28 +354,25 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     #ifdef THERMAL_CAMERA
-      StaticJsonDocument<256> doc;
+      StaticJsonDocument<1024> doc;
       JsonArray data = doc.createNestedArray("image");
-
-      String image = "";
       amg.readPixels(pixels);
 
-      // debug("[");
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
-        image = image + pixels[i-1] + ",";
         data.add(pixels[i-1]);
-        debug(pixels[i-1]);
-        debug(", ");
-        if( i%8 == 0 ) debugln();
       }
-      image = image.substring(0, image.length() -1);
-      debugln("]");
-      debugln();
-
-      char out[256];
+      debug("size of json image: "); debugln(sizeof(doc));
+      char out[1024];
       serializeJson(doc, out);
-      client.publish(data_topic_char, out);
+      debug("size of json char: "); debugln(sizeof(doc));
+      debug("message size: "); debugln(strlen(out));
+      // debugln(out);
+      client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
+      debug("mqtt buffer size: "); debugln(client.getBufferSize());
 
+      boolean rc = client.publish(data_topic_char, out);
+      if (!rc) {debug("MQTT not sent, too big or not connected - flag: "); debugln(rc);}
+      else debugln("MQTT send successfully");
     #endif
 
     #ifdef TEST
