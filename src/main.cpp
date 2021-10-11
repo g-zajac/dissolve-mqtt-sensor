@@ -1,11 +1,11 @@
 #define VERSION "1.5.1"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define TEST            // no sensor connected, just sends random values
+// #define TEST            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 
 #define SENSOR_ID "01"
 //------------------------------------------------------------------------------
@@ -129,25 +129,26 @@ PubSubClient client(espClient);
 // TODO move to lib, external object?
 #ifdef TEST
   const String sensor_type = TEST_LABEL;
-#elif PROXIMITY
-  const String sensor_type = "proximity";
-#elif WEIGHT
-  const String sensor_type = "weight";
-#elif GYRO
-  const String sensor_type = "gyro";
-#elif THERMAL_CAMERA
-  const String sensor_type = "thermal_camera";
-#else
-  const String sensor_type = "none";
+#endif
+#ifdef PROXIMITY
+  const String sensor_type = PROXIMITY_LABEL;
+#endif
+#ifdef WEIGHT
+  const String sensor_type = WEIGHT_LABEL;
+#endif
+#ifdef GYRO
+  const String sensor_type = GYRO_LABEL;
+#endif
+#ifdef THERMAL_CAMERA
+  const String sensor_type = THERMAL_CAMERA_LABEL;
 #endif
 
 // form mqtt topic based on template and id
 String topicPrefix = MQTT_TOPIC;
 String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + sensor_type + "/" + unit_id;
-
 String mDNSname = sensor_type + "-" + unit_id;
-
+// replace with serial blocking data -> report cue
 bool block_report = false;
 
 //--------------------------------- functions ----------------------------------
@@ -353,15 +354,13 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #endif
 
     #ifdef THERMAL_CAMERA
-      StaticJsonDocument<512> doc;
-      // doc["sensor"] = "camera";
-      JsonArray data = doc.createNestedArray("data");
+      StaticJsonDocument<256> doc;
+      JsonArray data = doc.createNestedArray("image");
 
       String image = "";
       amg.readPixels(pixels);
 
       // debug("[");
-      int row = 0;
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
         image = image + pixels[i-1] + ",";
         data.add(pixels[i-1]);
@@ -373,7 +372,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       debugln("]");
       debugln();
 
-      char out[760];
+      char out[256];
       serializeJson(doc, out);
       client.publish(data_topic_char, out);
 
@@ -437,6 +436,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       doc["MAC"] = WiFi.macAddress();
       doc["IP"] = WiFi.localIP();
       doc["uptime"] = uptimeInSecs();
+      doc["reset"] = ESP.getResetReason();
 
       #ifdef PROXIMITY
         const char* sensor_type = PROXIMITY_LABEL;
@@ -457,7 +457,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       doc["type"] = sensor_type;
 
       char out[256];
-      int b = serializeJson(doc, out);
+      serializeJson(doc, out);
 
       String sys_topic_json = topic + "/sys";
       const char * sys_topic_json_char = sys_topic_json.c_str();
