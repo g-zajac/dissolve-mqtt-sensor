@@ -1,4 +1,4 @@
-#define VERSION "1.4.3b"
+#define VERSION "1.4.3d"
 #define SENSOR_ID 01
 
 #define SERIAL_DEBUG 1
@@ -36,6 +36,7 @@
 // TestLib test(true);
 
 #include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
 extern "C"{
  #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
 }
@@ -143,6 +144,8 @@ String topicPrefix = MQTT_TOPIC;
 String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + sensor_type + "/" + unit_id;
 
+String mDNSname = sensor_type + "-" + unit_id;
+
 bool block_report = false;
 
 // functions
@@ -178,7 +181,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln();
   debugln("-----------------------");
 }
-
 
 void setup() {
 pinMode(sonoff_led_blue, OUTPUT);
@@ -269,8 +271,7 @@ client.setCallback(callback);
 // TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
     debugln("Connecting to MQTT...");
-    // TODO add sensor type and id to name
-    if (client.connect("esp8266-amg")) {
+    if (client.connect(mDNSname.c_str())) {
       debugln("connected");
       client.setKeepAlive(60);  // keep alive for 60secs
       debugln("set alive for 60 secs");
@@ -281,11 +282,18 @@ while (!client.connected()) {
     }
   }
 
+// Start the mDNS responder for mDNSname.local
+  if (!MDNS.begin(mDNSname)) {
+  debugln("Error setting up MDNS responder!");
+  }
+  debug("mDNS: "); debugln(mDNSname);
+
 // client.publish("esp/test", "Hello from ESP8266");
 // client.subscribe("esp/test");
 
 #ifdef OTA
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+      // TODO add dynamic sensor name mDNSname.c_str()
       request->send(200, "text/plain", "Hi! I am ESP8266.");
     });
 
