@@ -1,4 +1,4 @@
-#define VERSION "1.5.0"
+#define VERSION "1.5.1"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 #define TEST            // no sensor connected, just sends random values
@@ -393,7 +393,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       int b = serializeJson(doc, out);
 
       debug("JSON Test value: ");
-      debugln(b);
+      debugln(out);
 
       client.publish(data_topic_char, out);
       // client.publish("dupa/test", "dupa");
@@ -459,13 +459,13 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       char out[256];
       int b = serializeJson(doc, out);
 
-      String version_topic_json = topic + "/sys/";
-      const char * version_topic_json_char = version_topic_json.c_str();
-      client.publish(version_topic_json_char, out);
+      String sys_topic_json = topic + "/sys";
+      const char * sys_topic_json_char = sys_topic_json.c_str();
+      client.publish(sys_topic_json_char, out);
 
-      // Print serial report
-      // debug("sys report: "); debugln(out);
-      serializeJsonPretty(doc, Serial);
+      #if SERIAL_DEBUG == 1
+        serializeJsonPretty(doc, Serial);
+      #endif
 
       digitalWrite(sonoff_led_blue, HIGH);
       // previousReportTime += reportDiff;
