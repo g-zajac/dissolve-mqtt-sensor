@@ -435,20 +435,18 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       doc["uptime"] = uptimeInSecs();
       doc["reset"] = ESP.getResetReason();
 
-      #ifdef PROXIMITY
+      #if defined (PROXIMITY)
         const char* sensor_type = PROXIMITY_LABEL;
-      #endif
-      #ifdef WEIGHT
+      #elif defined (WEIGHT)
       const char* sensor_type = WEIGHT_LABEL;
-      #endif
-      #ifdef GYRO
+      #elif defined (GYRO)
         const char* sensor_type = GYRO_LABEL;
-      #endif
-      #ifdef THERMAL_CAMERA
+      #elif defined (THERMAL_CAMERA)
         const char* sensor_type = THERMAL_CAMERA_LABEL;
-      #endif
-      #ifdef TEST
+      #elif defined (TEST)
         const char* sensor_type = TEST_LABEL;
+      #else
+        const char* sensor_type = "not-defined";
       #endif
 
       doc["type"] = sensor_type;
