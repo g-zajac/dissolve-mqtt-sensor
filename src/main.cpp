@@ -1,4 +1,4 @@
-#define VERSION "1.5.1"
+#define VERSION "1.5.3"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define TEST            // no sensor connected, just sends random values
@@ -112,6 +112,8 @@ extern "C"{
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
   const unsigned long reportInterval = REPORT_RATE;
+  long lastReconnectAttempt = 0;
+  int reconnectAttemptCounter = 0;
 #endif
 
 unsigned long previousSensorTime = millis();
@@ -157,6 +159,21 @@ bool block_report = false;
 int uptimeInSecs(){
   return (int)(millis()/1000);
 }
+
+boolean reconnect() {
+  if (client.connect(mDNSname.c_str())) {
+    debugln("connected");
+    client.setKeepAlive(60);  // keep alive for 60secs
+    debugln("set alive for 60 secs");
+    // Once connected, publish an announcement...
+    // client.publish("outTopic","hello world");
+    // ... and resubscribe
+    // client.subscribe("inTopic");
+  }
+  return client.connected();
+}
+
+//============================================================
 
 #ifdef PROXIMITY
   float measure_distance(){
@@ -260,6 +277,10 @@ while (WiFi.status() != WL_CONNECTED)
   delay(500);
   debug(".");
 }
+
+WiFi.setAutoReconnect(true);    //To reconnect to Wi-Fi after a connection is lost
+WiFi.persistent(true);          // to automatically reconnect to the previously connected access point
+
 debugln();
 
 debug("Connected, IP address: ");
@@ -304,6 +325,22 @@ digitalWrite(sonoff_led_red, LOW);
 
 void loop() {
 
+if (!client.connected()) {
+  long now = millis();
+  if (now - lastReconnectAttempt > 5000) {
+    lastReconnectAttempt = now;
+    // Attempt to reconnect
+    if (reconnect()) {
+      lastReconnectAttempt = 0;
+      reconnectAttemptCounter++;
+    }
+  }
+} else {
+    // Client connected
+    client.loop();
+}
+
+
 #ifdef OTA
   webota.handle();
 #endif
@@ -317,7 +354,7 @@ void loop() {
 #endif
 
 unsigned long sensorDiff = millis() - previousSensorTime;
-  if(sensorDiff > sensorInterval) {
+  if((sensorDiff > sensorInterval) && client.connected()) {
     block_report = true;
     digitalWrite(sonoff_led_blue, LOW);
 
@@ -361,18 +398,22 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
         data.add(pixels[i-1]);
       }
-      debug("size of json image: "); debugln(sizeof(doc));
+      // debug("size of json image: "); debugln(sizeof(doc));
       char out[1024];
       serializeJson(doc, out);
-      debug("size of json char: "); debugln(sizeof(doc));
-      debug("message size: "); debugln(strlen(out));
-      // debugln(out);
+      // debug("size of json char: "); debugln(sizeof(doc));
+      // debug("message size: "); debugln(strlen(out));
+      debugln("");
+      debugln("data: ");
+      debugln(out);
+      debugln("");
+
       client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
-      debug("mqtt buffer size: "); debugln(client.getBufferSize());
+      // debug("mqtt buffer size: "); debugln(client.getBufferSize());
 
       boolean rc = client.publish(data_topic_char, out);
-      if (!rc) {debug("MQTT not sent, too big or not connected - flag: "); debugln(rc);}
-      else debugln("MQTT send successfully");
+      if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+      else debugln("MQTT data send successfully");
     #endif
 
     #ifdef TEST
@@ -401,17 +442,6 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       client.publish(data_topic_char, data_char);
     #endif
 
-    // TOD fix data issue, check MQTT limits
-    // #ifdef THERMAL_CAMERA
-    //   debug("publishing thermal camera mqtt topic: ");
-    //   debugln(data_topic_char);
-    //   debug("Array size: "); debugln(AMG88xx_PIXEL_ARRAY_SIZE);
-    //   debugln("payload: ");
-    //   debugln(image);
-    //   client.publish(data_topic_char, image.c_str());
-    //   // client.publish(data_topic_char, "dupa");
-    // #endif
-
     previousSensorTime = millis();
     block_report = false;
     digitalWrite(sonoff_led_blue, HIGH);
@@ -419,7 +449,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
 #ifdef MQTT_REPORT
   unsigned long reportDiff = millis() - previousReportTime;
-    if((reportDiff > reportInterval) && !block_report){
+    if((reportDiff > reportInterval) && !block_report && client.connected()){
 
       digitalWrite(sonoff_led_blue, LOW);
 
@@ -434,6 +464,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       doc["IP"] = WiFi.localIP();
       doc["uptime"] = uptimeInSecs();
       doc["reset"] = ESP.getResetReason();
+      doc["mqtt-reconnets"] = reconnectAttemptCounter;
 
       #if defined (PROXIMITY)
         const char* sensor_type = PROXIMITY_LABEL;
@@ -459,7 +490,10 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       client.publish(sys_topic_json_char, out);
 
       #if SERIAL_DEBUG == 1
+        debugln("------ report ------");
         serializeJsonPretty(doc, Serial);
+        debugln("");
+        debugln("--------------------");
       #endif
 
       digitalWrite(sonoff_led_blue, HIGH);
