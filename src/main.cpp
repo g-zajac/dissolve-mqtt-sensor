@@ -1,4 +1,4 @@
-#define VERSION "1.5.1"
+#define VERSION "1.5.2"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define TEST            // no sensor connected, just sends random values
@@ -112,6 +112,7 @@ extern "C"{
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
   const unsigned long reportInterval = REPORT_RATE;
+  long lastReconnectAttempt = 0;
 #endif
 
 unsigned long previousSensorTime = millis();
@@ -157,6 +158,21 @@ bool block_report = false;
 int uptimeInSecs(){
   return (int)(millis()/1000);
 }
+
+boolean reconnect() {
+  if (client.connect(mDNSname.c_str())) {
+    debugln("connected");
+    client.setKeepAlive(60);  // keep alive for 60secs
+    debugln("set alive for 60 secs");
+    // Once connected, publish an announcement...
+    // client.publish("outTopic","hello world");
+    // ... and resubscribe
+    // client.subscribe("inTopic");
+  }
+  return client.connected();
+}
+
+//============================================================
 
 #ifdef PROXIMITY
   float measure_distance(){
@@ -260,6 +276,10 @@ while (WiFi.status() != WL_CONNECTED)
   delay(500);
   debug(".");
 }
+
+WiFi.setAutoReconnect(true);    //To reconnect to Wi-Fi after a connection is lost
+WiFi.persistent(true);          // to automatically reconnect to the previously connected access point
+
 debugln();
 
 debug("Connected, IP address: ");
@@ -303,6 +323,21 @@ digitalWrite(sonoff_led_red, LOW);
 //=================================== LOOP ====================================
 
 void loop() {
+
+if (!client.connected()) {
+  long now = millis();
+  if (now - lastReconnectAttempt > 5000) {
+    lastReconnectAttempt = now;
+    // Attempt to reconnect
+    if (reconnect()) {
+      lastReconnectAttempt = 0;
+    }
+  }
+} else {
+    // Client connected
+    client.loop();
+}
+
 
 #ifdef OTA
   webota.handle();
