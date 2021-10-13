@@ -5,7 +5,10 @@
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-#define THERMAL_CAMERA
+// #define THERMAL_CAMERA
+
+// TODO change mqtt topic to replace higher level SENSOR type, check data, simple json without sub
+#define SOCKET
 
 #define SENSOR_ID "01"
 //------------------------------------------------------------------------------
@@ -16,15 +19,16 @@
 #define WEIGHT_LABEL "weight"
 #define GYRO_LABEL "gyro"
 #define THERMAL_CAMERA_LABEL "thermal_camera"
+#define SOCKET_LABEL "socket"
 
 #define MQTT_TOPIC "resonance/sensor/"
-// TODO set default sensor and sys data sampling rate
+#define MQTT_SUB_TOPIC "resonance/relay/"
 
 #define SERIAL_DEBUG 1  // 0 off, 1 on
 #define OTA
 
 #define MQTT_REPORT
-
+// TODO set default sensor and sys data sampling rate
 #define REPORT_RATE 3000 // in ms
 #define SENSOR_RATE 1000
 
@@ -74,6 +78,8 @@ extern "C"{
   Adafruit_AMG88xx amg;
 #endif
 
+// SOCKET does not have any sensor
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 #define sonoff_led_red 12
@@ -106,6 +112,10 @@ extern "C"{
   // #define AMG_ROWS 8
   // float pixels[AMG_COLS * AMG_ROWS];
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
+#endif
+
+#ifdef SOCKET
+  #define relay_pin 16 // tmp
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -144,11 +154,17 @@ PubSubClient client(espClient);
 #ifdef THERMAL_CAMERA
   const String sensor_type = THERMAL_CAMERA_LABEL;
 #endif
+#ifdef SOCKET
+  const String sensor_type = SOCKET_LABEL;
+#endif
+
 
 // form mqtt topic based on template and id
 String topicPrefix = MQTT_TOPIC;
+String sub_topicPrefix = MQTT_SUB_TOPIC;
 String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + sensor_type + "/" + unit_id;
+String subscribe_topic = sub_topicPrefix + sensor_type + "/" + unit_id;
 String mDNSname = sensor_type + "-" + unit_id;
 // replace with serial blocking data -> report cue
 bool block_report = false;
@@ -168,7 +184,8 @@ boolean reconnect() {
     // Once connected, publish an announcement...
     // client.publish("outTopic","hello world");
     // ... and resubscribe
-    // client.subscribe("inTopic");
+    client.subscribe(subscribe_topic.c_str());
+    debug("subscribing for topis: "); debugln(subscribe_topic);
   }
   return client.connected();
 }
@@ -190,6 +207,7 @@ boolean reconnect() {
 #endif
 
 void callback(char* topic, byte* payload, unsigned int length) {
+  debugln("-----------------------");
   debug("Message arrived in topic: ");
   debugln(topic);
 
@@ -267,6 +285,12 @@ debugln();
       while (1);
   }
 #endif
+
+#ifdef SOCKET
+  pinMode(relay_pin, OUTPUT);
+  digitalWrite(relay_pin, LOW);
+#endif
+
 //------------------------------------------------------------------------------
 
 WiFi.begin(mySSID, myPASSWORD);
@@ -291,13 +315,17 @@ client.setCallback(callback);
 
 // TODO add MQTT checking function to reconnect if lost
 while (!client.connected()) {
-    debugln("Connecting to MQTT...");
-    if (client.connect(mDNSname.c_str())) {
-      debugln("connected");
-      client.setKeepAlive(60);  // keep alive for 60secs
-      debugln("set alive for 60 secs");
+    debug("Connecting to MQTT...");
+    if (reconnect()){
+      debugln(" connected");
+
+    // if (client.connect(mDNSname.c_str())) {
+    //   debugln("connected");
+    //   client.setKeepAlive(60);  // keep alive for 60secs
+    //   debugln("set alive for 60 secs");
+
     } else {
-      debug("failed with state ");
+      debug(" failed with state ");
       debug(client.state());
       delay(2000);
     }
@@ -360,6 +388,19 @@ unsigned long sensorDiff = millis() - previousSensorTime;
 
     String data_topic = topic + "/data";
     const char * data_topic_char = data_topic.c_str();
+
+    #ifdef SOCKET
+      StaticJsonDocument<128> doc;
+      JsonArray data = doc.createNestedArray("relay");
+      data.add("on");
+
+      char out[128];
+      serializeJson(doc, out);
+
+      boolean rc = client.publish(data_topic_char, out);
+      if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+      else debugln("MQTT data send successfully");
+    #endif
 
     #ifdef WEIGHT
       float data = LoadCell.getData();
@@ -445,7 +486,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     previousSensorTime = millis();
     block_report = false;
     digitalWrite(sonoff_led_blue, HIGH);
-  }
+}
 
 #ifdef MQTT_REPORT
   unsigned long reportDiff = millis() - previousReportTime;
@@ -476,6 +517,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
         const char* sensor_type = THERMAL_CAMERA_LABEL;
       #elif defined (TEST)
         const char* sensor_type = TEST_LABEL;
+      #elif defined (SOCKET)
+        const char* sensor_type = SOCKET_LABEL;
       #else
         const char* sensor_type = "not-defined";
       #endif
