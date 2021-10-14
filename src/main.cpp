@@ -1,4 +1,4 @@
-#define VERSION "1.5.3"
+#define VERSION "1.5.4"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define TEST            // no sensor connected, just sends random values
@@ -22,7 +22,7 @@
 #define SOCKET_LABEL "socket"
 
 #define MQTT_TOPIC "resonance/sensor/"
-#define MQTT_SUB_TOPIC "resonance/relay/"
+#define MQTT_SUB_TOPIC "resonance/socket/"
 
 #define SERIAL_DEBUG 1  // 0 off, 1 on
 #define OTA
@@ -82,7 +82,7 @@ extern "C"{
 
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
-#define sonoff_led_red 12
+// #define sonoff_led_red 12
 
 #define LED_ESP 2
 
@@ -114,8 +114,9 @@ extern "C"{
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
 
+// NOTE different pin on socket? TH? to check
 #ifdef SOCKET
-  #define relay_pin 16 // tmp
+  #define relay_pin 12 //TH red LED
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -160,14 +161,19 @@ PubSubClient client(espClient);
 
 
 // form mqtt topic based on template and id
-String topicPrefix = MQTT_TOPIC;
-String sub_topicPrefix = MQTT_SUB_TOPIC;
+#if defined (SOCKET)
+  String topicPrefix = MQTT_SUB_TOPIC;
+#else
+  String topicPrefix = MQTT_TOPIC;
+#endif
+
 String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + sensor_type + "/" + unit_id;
-String subscribe_topic = sub_topicPrefix + sensor_type + "/" + unit_id;
+String subscribe_topic = topic + "/relay";
 String mDNSname = sensor_type + "-" + unit_id;
 // replace with serial blocking data -> report cue
 bool block_report = false;
+
 
 //--------------------------------- functions ----------------------------------
 
@@ -210,10 +216,22 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("-----------------------");
   debug("Message arrived in topic: ");
   debugln(topic);
-
   debug("Message:");
+
+  String messageTemp;
   for (int i = 0; i < length; i++) {
+    messageTemp += (char)payload[i];
     debug((char)payload[i]);
+  }
+
+  if (String(topic) == subscribe_topic.c_str()){
+    if (messageTemp == "on"){
+      debugln("payload = ON");
+      digitalWrite(relay_pin, HIGH);
+    } else if (messageTemp == "off"){
+      debugln("payload = off");
+      digitalWrite(relay_pin, LOW);
+    }
   }
 
   debugln();
@@ -223,8 +241,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
 //=================================== SETUP ====================================
 void setup() {
 pinMode(sonoff_led_blue, OUTPUT);
-pinMode(sonoff_led_red, OUTPUT);
-digitalWrite(sonoff_led_red, HIGH);
+// pinMode(sonoff_led_red, OUTPUT);
+// digitalWrite(sonoff_led_red, HIGH);
 // pinMode(LED_ESP, OUTPUT);
 
 digitalWrite(sonoff_led_blue, HIGH);
@@ -346,7 +364,7 @@ while (!client.connected()) {
   webota.init(8888, "/update");
 #endif
 
-digitalWrite(sonoff_led_red, LOW);
+// digitalWrite(sonoff_led_red, LOW);
 } // end of setup
 
 //=================================== LOOP ====================================
@@ -392,7 +410,8 @@ unsigned long sensorDiff = millis() - previousSensorTime;
     #ifdef SOCKET
       StaticJsonDocument<128> doc;
       JsonArray data = doc.createNestedArray("relay");
-      data.add("on");
+      if (digitalRead(relay_pin) == HIGH){ data.add("on"); }
+      if (digitalRead(relay_pin) == LOW){ data.add("off"); }
 
       char out[128];
       serializeJson(doc, out);
