@@ -1,16 +1,16 @@
-#define VERSION "1.5.4"
+#define VERSION "1.5.4b"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define TEST            // no sensor connected, just sends random values
+#define TEST            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
 
 // TODO change mqtt topic to replace higher level SENSOR type, check data, simple json without sub
-#define SOCKET
+// #define SOCKET
 
-#define SENSOR_ID "01"
+#define SENSOR_ID "02"
 //------------------------------------------------------------------------------
 
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -119,6 +119,10 @@ extern "C"{
   #define relay_pin 12 //TH red LED
 #endif
 
+#ifndef SOCKET
+  #define relay_pin 12 //TH red LED
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -191,7 +195,7 @@ boolean reconnect() {
     // client.publish("outTopic","hello world");
     // ... and resubscribe
     client.subscribe(subscribe_topic.c_str());
-    debug("subscribing for topis: "); debugln(subscribe_topic);
+    debug("subscribing for topics: "); debugln(subscribe_topic);
   }
   return client.connected();
 }
@@ -223,13 +227,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
     messageTemp += (char)payload[i];
     debug((char)payload[i]);
   }
+  debugln("");
 
   if (String(topic) == subscribe_topic.c_str()){
     if (messageTemp == "on"){
-      debugln("payload = ON");
+      debugln("relay turned ON");
       digitalWrite(relay_pin, HIGH);
     } else if (messageTemp == "off"){
-      debugln("payload = off");
+      debugln("relay turned off");
       digitalWrite(relay_pin, LOW);
     }
   }
@@ -305,6 +310,11 @@ debugln();
 #endif
 
 #ifdef SOCKET
+  pinMode(relay_pin, OUTPUT);
+  digitalWrite(relay_pin, LOW);
+#endif
+
+#ifndef SOCKET
   pinMode(relay_pin, OUTPUT);
   digitalWrite(relay_pin, LOW);
 #endif
@@ -487,7 +497,7 @@ unsigned long sensorDiff = millis() - previousSensorTime;
       }
 
       char out[128];
-      int b = serializeJson(doc, out);
+      serializeJson(doc, out);
 
       debug("JSON Test value: ");
       debugln(out);
