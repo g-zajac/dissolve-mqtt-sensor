@@ -1,20 +1,18 @@
 #define VERSION "1.6.4"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define TEST            // no sensor connected, just sends random values
+#define DUMMY            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
-
-// TODO change mqtt topic to replace higher level SENSOR type, check data, simple json without sub
-#define SOCKET
+// #define SOCKET
 
 #define SENSOR_ID "01"
 //------------------------------------------------------------------------------
 
 // Sensors labels, used in MQTT topic, report, mDNS etc
-#define TEST_LABEL "test"
+#define DUMMY_LABEL "dummy"
 #define PROXIMITY_LABEL "proximity"
 #define WEIGHT_LABEL "weight"
 #define GYRO_LABEL "gyro"
@@ -28,7 +26,6 @@
 #define MQTT_REPORT
 // TODO set default sensor and sys data sampling rate
 #define REPORT_RATE 3000 // in ms
-#define SENSOR_RATE 1000
 
 #define SERIAL_DEBUG 1                                  // 0 off, 1 on
 #define OTA
@@ -123,7 +120,6 @@ extern "C"{
 #endif
 
 unsigned long previousSensorTime = millis();
-const unsigned long sensorInterval = SENSOR_RATE;
 
 int wifiConnetionsCounter = 0;
 WiFiClient espClient;
@@ -139,22 +135,28 @@ PubSubClient client(espClient);
 
 //------------------------------------------------------------------------------
 // TODO move to lib, external object?
-#ifdef TEST
-  const String sensor_type = TEST_LABEL;
+#ifdef DUMMY
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = DUMMY_LABEL;
 #endif
 #ifdef PROXIMITY
+  const unsigned long sensorInterval = 3000;
   const String sensor_type = PROXIMITY_LABEL;
 #endif
 #ifdef WEIGHT
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = WEIGHT_LABEL;
 #endif
 #ifdef GYRO
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = GYRO_LABEL;
 #endif
 #ifdef THERMAL_CAMERA
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = THERMAL_CAMERA_LABEL;
 #endif
 #ifdef SOCKET
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = SOCKET_LABEL;
 #endif
 
@@ -474,9 +476,9 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef TEST
+      #ifdef DUMMY
         StaticJsonDocument<256> doc;
-        doc["data"] = "test";
+        doc["data"] = "dummy";
         doc["relay"] = digitalRead(relay_pin);
         doc["uptime"] = millis()/1000;
         JsonArray data = doc.createNestedArray("data");
@@ -538,8 +540,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = GYRO_LABEL;
         #elif defined (THERMAL_CAMERA)
           const char* sensor_type = THERMAL_CAMERA_LABEL;
-        #elif defined (TEST)
-          const char* sensor_type = TEST_LABEL;
+        #elif defined (DUMMY)
+          const char* sensor_type = DUMMY_LABEL;
         #elif defined (SOCKET)
           const char* sensor_type = SOCKET_LABEL;
         #else
