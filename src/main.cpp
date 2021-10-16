@@ -1,12 +1,13 @@
-#define VERSION "1.6.7"
+#define VERSION "1.6.8"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY            // no sensor connected, just sends random values
+// #define DUMMY            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
 // #define SOCKET
+#define SERVO
 
 //------------------------------------------------------------------------------
 
@@ -17,6 +18,7 @@
 #define GYRO_LABEL "gyro"
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
+#define SERVO_LABEL "servo"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -83,6 +85,19 @@ extern "C"{
 
 // SOCKET does not have any sensor
 
+#ifdef SERVO
+  #include <Adafruit_PWMServoDriver.h>
+  Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+  #define SERVOMIN  150 // This is the 'minimum' pulse length count (out of 4096)
+  #define SERVOMAX  600 // This is the 'maximum' pulse length count (out of 4096)
+  #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
+
+  int servo_position = 0; // home valve closed? in degrees
+  // our servo # number
+  uint8_t servonum = 0;
+#endif
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -120,6 +135,11 @@ extern "C"{
 #ifndef SOCKET
   #define relay_pin 12 //TH relay with red LED
 #endif
+
+#ifdef SERVO
+  //
+#endif
+
 
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
@@ -168,6 +188,10 @@ PubSubClient client(espClient);
 #ifdef SOCKET
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SOCKET_LABEL;
+#endif
+#ifdef SERVO
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = SERVO_LABEL;
 #endif
 
 
@@ -259,6 +283,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   debugln("");
 
+  //TODO subscribe multiple topics - with strcmp - https://www.baldengineer.com/multiple-mqtt-topics-pubsubclient.html
   if (String(topic) == subscribe_topic.c_str()){
     if (messageTemp == "on"){
       debugln("relay turned ON");
@@ -271,6 +296,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("- - - - - - - - - - - - -");
   debugln("");
 }
+
 
 //=================================== SETUP ====================================
 void setup() {
@@ -374,6 +400,13 @@ mDNSname = sensor_type + "-" + unit_id;
 #ifndef SOCKET
   pinMode(relay_pin, OUTPUT);
   digitalWrite(relay_pin, LOW); // default off
+#endif
+
+#ifdef SERVO
+  pwm.begin();
+  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~60 Hz updates
+  delay(100);
+  pwm.setPWM(servonum, 0, SERVOMIN); // set home
 #endif
 
 //------------------------------------------------------------------------------
@@ -556,6 +589,23 @@ if (WiFi.status() == WL_CONNECTED){
         client.publish(data_topic_char, data_char);
       #endif
 
+      #ifdef SERVO
+        servo_position = 90;
+        int pulselength = map(servo_position, 0, 180, SERVOMIN, SERVOMAX);
+        pwm.setPWM(servonum, 0, pulselength);
+
+        StaticJsonDocument<128> doc;
+        doc["valve position"] = servo_position;
+        char out[128];
+        serializeJson(doc, out);
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
       previousSensorTime = millis();
       block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
@@ -593,6 +643,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = DUMMY_LABEL;
         #elif defined (SOCKET)
           const char* sensor_type = SOCKET_LABEL;
+        #elif defined (SERVO)
+          const char* sensor_type = SERVO_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
