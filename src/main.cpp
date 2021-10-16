@@ -1,4 +1,4 @@
-#define VERSION "1.6.6"
+#define VERSION "1.6.7"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 #define DUMMY            // no sensor connected, just sends random values
@@ -27,6 +27,7 @@
 #define REPORT_RATE 3000 // in ms
 
 #define SERIAL_DEBUG 1                                  // 0 off, 1 on
+#define BUTTON
 #define OTA
 
 #if SERIAL_DEBUG == 1
@@ -54,6 +55,11 @@ extern "C"{
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
 
+#ifdef BUTTON
+  #include <Bounce2.h>
+  Bounce b = Bounce();
+#endif
+
 #ifdef OTA
   #include <WebOTA.h>
 #endif
@@ -79,6 +85,10 @@ extern "C"{
 
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
+
+#ifdef BUTTON
+  #define sonoff_button_pin 0 //16?
+#endif
 
 #ifdef PROXIMITY
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
@@ -171,6 +181,7 @@ PubSubClient client(espClient);
 String topic = "";
 String subscribe_topic = "";
 String mDNSname = "";
+String button_topic = "";
 
 bool block_report = false;
 
@@ -314,6 +325,11 @@ topic = topicPrefix + sensor_type + "/" + unit_id;
 subscribe_topic = topic + "/relay";
 mDNSname = sensor_type + "-" + unit_id;
 
+#ifdef BUTTON
+  b.attach(sonoff_button_pin,INPUT_PULLUP); // Attach the debouncer to a pin with INPUT_PULLUP mode
+  b.interval(25); // Use a debounce interval of 25 milliseconds
+  button_topic = topic + "/button";
+#endif
 
 //-------------------------------- sensor setup --------------------------------
 #ifdef PROXIMITY
@@ -409,7 +425,15 @@ if (WiFi.status() == WL_CONNECTED){
       client.loop();
   } //end of mqtt connection reconnecting
 
-
+  #ifdef BUTTON
+    b.update(); // Update the Bounce instance
+    if ( b.fell() ) {  // Call code if button transitions from HIGH to LOW
+      debugln("button pressed!");
+      boolean rc = client.publish(button_topic.c_str(), "button pressed");
+      if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+      else debugln("MQTT data send successfully");
+    }
+  #endif
 
   #ifdef OTA
     webota.handle();
