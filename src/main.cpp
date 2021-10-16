@@ -10,7 +10,7 @@
 // TODO change mqtt topic to replace higher level SENSOR type, check data, simple json without sub
 #define SOCKET
 
-#define SENSOR_ID "03"
+#define SENSOR_ID "01"
 //------------------------------------------------------------------------------
 
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -343,19 +343,6 @@ initWiFi();
 
 client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
-
-
-// while (!client.connected()) {
-//     debug("Connecting to MQTT...");
-//     if (reconnect()){
-//       digitalWrite(sonoff_led_blue, HIGH);
-//     } else {
-//       digitalWrite(sonoff_led_blue, HIGH);
-//       debug(" failed with state ");
-//       debug(client.state());
-//       delay(2000);
-//     }
-// }
 
 // Start the mDNS responder for mDNSname.local
 if (!MDNS.begin(mDNSname)) {
