@@ -1,16 +1,16 @@
-#define VERSION "1.5.4b"
+#define VERSION "1.6.1"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define TEST            // no sensor connected, just sends random values
+// #define TEST            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
 
 // TODO change mqtt topic to replace higher level SENSOR type, check data, simple json without sub
-// #define SOCKET
+#define SOCKET
 
-#define SENSOR_ID "02"
+#define SENSOR_ID "03"
 //------------------------------------------------------------------------------
 
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -23,15 +23,15 @@
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
-
-#define SERIAL_DEBUG 1  // 0 off, 1 on
-#define OTA
+#define MQTT_ALIVE 60                                   // alive time in secs
 
 #define MQTT_REPORT
 // TODO set default sensor and sys data sampling rate
 #define REPORT_RATE 3000 // in ms
 #define SENSOR_RATE 1000
 
+#define SERIAL_DEBUG 1                                  // 0 off, 1 on
+#define OTA
 
 #if SERIAL_DEBUG == 1
   #define debug(x) Serial.print(x)
@@ -82,12 +82,6 @@ extern "C"{
 
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
-// #define sonoff_led_red 12
-
-#define LED_ESP 2
-
-// TODO add MQTT subscription for relay control
-// #define SONOFF_LED2 12 // relay
 
 #ifdef PROXIMITY
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
@@ -108,19 +102,16 @@ extern "C"{
 #endif
 
 #ifdef THERMAL_CAMERA
-  // #define AMG_COLS 8
-  // #define AMG_ROWS 8
-  // float pixels[AMG_COLS * AMG_ROWS];
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
 #endif
 
 // NOTE different pin on socket? TH? to check
 #ifdef SOCKET
-  #define relay_pin 12 //TH red LED
+  #define relay_pin 12 //figure out socket relay pin
 #endif
 
 #ifndef SOCKET
-  #define relay_pin 12 //TH red LED
+  #define relay_pin 12 //TH relay with red LED
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -135,6 +126,9 @@ unsigned long previousSensorTime = millis();
 const unsigned long sensorInterval = SENSOR_RATE;
 
 WiFiClient espClient;
+WiFiEventHandler wifiConnectHandler;
+WiFiEventHandler wifiDisconnectHandler;
+
 PubSubClient client(espClient);
 
 #ifdef WEIGHT
@@ -175,27 +169,49 @@ String unit_id = String(SENSOR_ID);
 String topic = topicPrefix + sensor_type + "/" + unit_id;
 String subscribe_topic = topic + "/relay";
 String mDNSname = sensor_type + "-" + unit_id;
-// replace with serial blocking data -> report cue
+
 bool block_report = false;
 
 
 //--------------------------------- functions ----------------------------------
 
-//TODO convert to human friendly texh HH:MM:SS?
 int uptimeInSecs(){
   return (int)(millis()/1000);
 }
 
+void initWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(mySSID, myPASSWORD);
+  debugln("Connecting to WiFi ..");
+  while (WiFi.status() != WL_CONNECTED) {
+    digitalWrite(sonoff_led_blue, LOW);
+    debug(".");
+    delay(500);
+  }
+  // debugln(WiFi.localIP());
+}
+
+void onWifiConnect(const WiFiEventStationModeGotIP& event) {
+  debugln("Connected to Wi-Fi sucessfully.");
+  debug("IP address: ");
+  debugln(WiFi.localIP());
+  digitalWrite(sonoff_led_blue, HIGH);
+}
+
+void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
+  debugln("Disconnected from Wi-Fi, trying to connect...");
+  WiFi.disconnect();
+  digitalWrite(sonoff_led_blue, LOW);
+  WiFi.begin(mySSID, myPASSWORD);
+}
+
 boolean reconnect() {
   if (client.connect(mDNSname.c_str())) {
-    debugln("connected");
-    client.setKeepAlive(60);  // keep alive for 60secs
-    debugln("set alive for 60 secs");
-    // Once connected, publish an announcement...
-    // client.publish("outTopic","hello world");
-    // ... and resubscribe
-    client.subscribe(subscribe_topic.c_str());
-    debug("subscribing for topics: "); debugln(subscribe_topic);
+    debug("connected, ");
+    client.setKeepAlive(MQTT_ALIVE);
+    debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
+    client.subscribe(subscribe_topic.c_str());   // resubscribe mqtt
+    debug("subscribed for topic: "); debugln(subscribe_topic);
   }
   return client.connected();
 }
@@ -217,7 +233,7 @@ boolean reconnect() {
 #endif
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  debugln("-----------------------");
+  debugln("- - - - - - - - - - - - -");
   debug("Message arrived in topic: ");
   debugln(topic);
   debug("Message:");
@@ -238,19 +254,14 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(relay_pin, LOW);
     }
   }
-
-  debugln();
-  debugln("-----------------------");
+  debugln("- - - - - - - - - - - - -");
+  debugln("");
 }
 
 //=================================== SETUP ====================================
 void setup() {
 pinMode(sonoff_led_blue, OUTPUT);
-// pinMode(sonoff_led_red, OUTPUT);
-// digitalWrite(sonoff_led_red, HIGH);
-// pinMode(LED_ESP, OUTPUT);
-
-digitalWrite(sonoff_led_blue, HIGH);
+digitalWrite(sonoff_led_blue, HIGH);  // default off
 
 Serial.begin(115200);
 
@@ -311,62 +322,43 @@ debugln();
 
 #ifdef SOCKET
   pinMode(relay_pin, OUTPUT);
-  digitalWrite(relay_pin, LOW);
+  digitalWrite(relay_pin, LOW); // default off
 #endif
 
 #ifndef SOCKET
   pinMode(relay_pin, OUTPUT);
-  digitalWrite(relay_pin, LOW);
+  digitalWrite(relay_pin, LOW); // default off
 #endif
 
 //------------------------------------------------------------------------------
 
-WiFi.begin(mySSID, myPASSWORD);
+//Register wifi event handlers
+wifiConnectHandler = WiFi.onStationModeGotIP(onWifiConnect);
+wifiDisconnectHandler = WiFi.onStationModeDisconnected(onWifiDisconnect);
 
-debug("Connecting");
-while (WiFi.status() != WL_CONNECTED)
-{
-  delay(500);
-  debug(".");
-}
-
-WiFi.setAutoReconnect(true);    //To reconnect to Wi-Fi after a connection is lost
-WiFi.persistent(true);          // to automatically reconnect to the previously connected access point
-
-debugln();
-
-debug("Connected, IP address: ");
-debugln(WiFi.localIP());
+initWiFi();
 
 client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
 
-// TODO add MQTT checking function to reconnect if lost
+
 while (!client.connected()) {
     debug("Connecting to MQTT...");
     if (reconnect()){
-      debugln(" connected");
-
-    // if (client.connect(mDNSname.c_str())) {
-    //   debugln("connected");
-    //   client.setKeepAlive(60);  // keep alive for 60secs
-    //   debugln("set alive for 60 secs");
-
+      digitalWrite(sonoff_led_blue, HIGH);
     } else {
+      digitalWrite(sonoff_led_blue, HIGH);
       debug(" failed with state ");
       debug(client.state());
       delay(2000);
     }
-  }
+}
 
 // Start the mDNS responder for mDNSname.local
-  if (!MDNS.begin(mDNSname)) {
+if (!MDNS.begin(mDNSname)) {
   debugln("Error setting up MDNS responder!");
-  }
-  debug("mDNS: "); debugln(mDNSname);
-
-// client.publish("esp/test", "Hello from ESP8266");
-// client.subscribe("esp/test");
+}
+debug("mDNS: "); debugln(mDNSname);
 
 #ifdef OTA
   // To use a specific port and path uncomment this line
@@ -374,203 +366,214 @@ while (!client.connected()) {
   webota.init(8888, "/update");
 #endif
 
-// digitalWrite(sonoff_led_red, LOW);
 } // end of setup
 
 //=================================== LOOP ====================================
 
 void loop() {
 
-if (!client.connected()) {
-  long now = millis();
-  if (now - lastReconnectAttempt > 5000) {
-    lastReconnectAttempt = now;
-    // Attempt to reconnect
-    if (reconnect()) {
-      lastReconnectAttempt = 0;
-      reconnectAttemptCounter++;
+// check if connected to wifi
+if (WiFi.status() == WL_CONNECTED){
+
+  // check if connected to mqtt
+  if (!client.connected()) {
+    long now = millis();
+    if (now - lastReconnectAttempt > 5000) {
+      lastReconnectAttempt = now;
+      debugln("reconnecting to mqtt broker...");
+      // Attempt to reconnect
+      if (reconnect()) {
+        lastReconnectAttempt = 0;
+        reconnectAttemptCounter++;
+      }
     }
-  }
-} else {
-    // Client connected
-    client.loop();
-}
+  } else {
+      // Client connected
+      client.loop();
+  } //end of mqtt connection reconnecting
 
 
-#ifdef OTA
-  webota.handle();
-#endif
 
-#ifdef WEIGHT
-  LoadCell.update();
-#endif
+  #ifdef OTA
+    webota.handle();
+  #endif
 
-#ifdef GYRO
-  gyro.read();
-#endif
+  #ifdef WEIGHT
+    LoadCell.update();
+  #endif
 
-unsigned long sensorDiff = millis() - previousSensorTime;
-  if((sensorDiff > sensorInterval) && client.connected()) {
-    block_report = true;
-    digitalWrite(sonoff_led_blue, LOW);
+  #ifdef GYRO
+    gyro.read();
+  #endif
 
-    String data_topic = topic + "/data";
-    const char * data_topic_char = data_topic.c_str();
-
-    #ifdef SOCKET
-      StaticJsonDocument<128> doc;
-      JsonArray data = doc.createNestedArray("relay");
-      if (digitalRead(relay_pin) == HIGH){ data.add("on"); }
-      if (digitalRead(relay_pin) == LOW){ data.add("off"); }
-
-      char out[128];
-      serializeJson(doc, out);
-
-      boolean rc = client.publish(data_topic_char, out);
-      if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
-      else debugln("MQTT data send successfully");
-    #endif
-
-    #ifdef WEIGHT
-      float data = LoadCell.getData();
-      debug("Weight: ");
-      debugln(data);
-    #endif
-
-    #ifdef PROXIMITY
-      float data = measure_distance();
-      debug("Distance: ");
-      debugln(data);
-    #endif
-
-    #ifdef GYRO
-      debug("G ");
-      debug("X: ");
-      debug((int)gyro.g.x);
-      debug(" Y: ");
-      debug((int)gyro.g.y);
-      debug(" Z: ");
-      debugln((int)gyro.g.z);
-
-      int dataX = (int)gyro.g.x;
-      int dataY = (int)gyro.g.y;
-      int dataZ = (int)gyro.g.z;
-
-      String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
-      client.publish(data_topic_char, gyro_data.c_str());
-    #endif
-
-    #ifdef THERMAL_CAMERA
-      StaticJsonDocument<1024> doc;
-      JsonArray data = doc.createNestedArray("image");
-      amg.readPixels(pixels);
-
-      for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
-        data.add(pixels[i-1]);
-      }
-      // debug("size of json image: "); debugln(sizeof(doc));
-      char out[1024];
-      serializeJson(doc, out);
-      // debug("size of json char: "); debugln(sizeof(doc));
-      // debug("message size: "); debugln(strlen(out));
-      debugln("");
-      debugln("data: ");
-      debugln(out);
-      debugln("");
-
-      client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
-      // debug("mqtt buffer size: "); debugln(client.getBufferSize());
-
-      boolean rc = client.publish(data_topic_char, out);
-      if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
-      else debugln("MQTT data send successfully");
-    #endif
-
-    #ifdef TEST
-      StaticJsonDocument<256> doc;
-      doc["sensor"] = "test";
-      doc["uptime"] = millis()/1000;
-      JsonArray data = doc.createNestedArray("data");
-
-      for (int i = 0; i < 10; i++){
-        data.add(random(0,100));
-      }
-
-      char out[128];
-      serializeJson(doc, out);
-
-      debug("JSON Test value: ");
-      debugln(out);
-
-      client.publish(data_topic_char, out);
-      // client.publish("dupa/test", "dupa");
-    #endif
-
-    #if defined(PROXIMITY) || defined(WEIGHT)
-      char data_char[8];
-      itoa(data, data_char, 10);
-      client.publish(data_topic_char, data_char);
-    #endif
-
-    previousSensorTime = millis();
-    block_report = false;
-    digitalWrite(sonoff_led_blue, HIGH);
-}
-
-#ifdef MQTT_REPORT
-  unsigned long reportDiff = millis() - previousReportTime;
-    if((reportDiff > reportInterval) && !block_report && client.connected()){
-
+  unsigned long sensorDiff = millis() - previousSensorTime;
+    if((sensorDiff > sensorInterval) && client.connected()) {
+      block_report = true;
       digitalWrite(sonoff_led_blue, LOW);
 
-      StaticJsonDocument<256> doc;
-      doc["version"] = VERSION;
-      //TODO add sub object json compilation - date and time
-      doc["compilation_date"] = __DATE__ ;
-      doc["compilation_time"] = __TIME__ ;
-      //TODO optimise, read once in setup and use const, don't read every time!
-      doc["rssi"] = WiFi.RSSI();
-      doc["MAC"] = WiFi.macAddress();
-      doc["IP"] = WiFi.localIP();
-      doc["uptime"] = uptimeInSecs();
-      doc["reset"] = ESP.getResetReason();
-      doc["mqtt-reconnets"] = reconnectAttemptCounter;
+      String data_topic = topic + "/data";
+      const char * data_topic_char = data_topic.c_str();
 
-      #if defined (PROXIMITY)
-        const char* sensor_type = PROXIMITY_LABEL;
-      #elif defined (WEIGHT)
-      const char* sensor_type = WEIGHT_LABEL;
-      #elif defined (GYRO)
-        const char* sensor_type = GYRO_LABEL;
-      #elif defined (THERMAL_CAMERA)
-        const char* sensor_type = THERMAL_CAMERA_LABEL;
-      #elif defined (TEST)
-        const char* sensor_type = TEST_LABEL;
-      #elif defined (SOCKET)
-        const char* sensor_type = SOCKET_LABEL;
-      #else
-        const char* sensor_type = "not-defined";
+      #ifdef SOCKET
+        StaticJsonDocument<128> doc;
+        doc["relay"] = digitalRead(relay_pin);
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
       #endif
 
-      doc["type"] = sensor_type;
+      #ifdef WEIGHT
+        float data = LoadCell.getData();
+        debug("Weight: ");
+        debugln(data);
+      #endif
 
-      char out[256];
-      serializeJson(doc, out);
+      #ifdef PROXIMITY
+        float data = measure_distance();
+        debug("Distance: ");
+        debugln(data);
+      #endif
 
-      String sys_topic_json = topic + "/sys";
-      const char * sys_topic_json_char = sys_topic_json.c_str();
-      client.publish(sys_topic_json_char, out);
+      #ifdef GYRO
+        debug("G ");
+        debug("X: ");
+        debug((int)gyro.g.x);
+        debug(" Y: ");
+        debug((int)gyro.g.y);
+        debug(" Z: ");
+        debugln((int)gyro.g.z);
 
-      #if SERIAL_DEBUG == 1
-        debugln("------ report ------");
-        serializeJsonPretty(doc, Serial);
+        int dataX = (int)gyro.g.x;
+        int dataY = (int)gyro.g.y;
+        int dataZ = (int)gyro.g.z;
+
+        String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
+        client.publish(data_topic_char, gyro_data.c_str());
+      #endif
+
+      #ifdef THERMAL_CAMERA
+        StaticJsonDocument<1024> doc;
+        JsonArray data = doc.createNestedArray("image");
+        amg.readPixels(pixels);
+
+        for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
+          data.add(pixels[i-1]);
+        }
+        // debug("size of json image: "); debugln(sizeof(doc));
+        char out[1024];
+        serializeJson(doc, out);
+        // debug("size of json char: "); debugln(sizeof(doc));
+        // debug("message size: "); debugln(strlen(out));
         debugln("");
-        debugln("--------------------");
+        debugln("data: ");
+        debugln(out);
+        debugln("");
+
+        client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
+        // debug("mqtt buffer size: "); debugln(client.getBufferSize());
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef TEST
+        StaticJsonDocument<256> doc;
+        doc["data"] = "test";
+        doc["relay"] = digitalRead(relay_pin);
+        doc["uptime"] = millis()/1000;
+        JsonArray data = doc.createNestedArray("data");
+
+        for (int i = 0; i < 10; i++){
+          data.add(random(0,100));
+        }
+
+        char out[128];
+        serializeJson(doc, out);
+
+        debug("JSON Test value: ");
+        debugln(out);
+
+        client.publish(data_topic_char, out);
+        // client.publish("dupa/test", "dupa");
+      #endif
+
+      #if defined(PROXIMITY) || defined(WEIGHT)
+        char data_char[8];
+        itoa(data, data_char, 10);
+        client.publish(data_topic_char, data_char);
+      #endif
+
+      previousSensorTime = millis();
+      block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
-      // previousReportTime += reportDiff;
-      previousReportTime = millis();
-    }
-  #endif
+  }
+
+  #ifdef MQTT_REPORT
+    unsigned long reportDiff = millis() - previousReportTime;
+      if((reportDiff > reportInterval) && !block_report && client.connected()){
+
+        digitalWrite(sonoff_led_blue, LOW);
+
+        StaticJsonDocument<256> doc;
+        doc["version"] = VERSION;
+        //TODO add sub object json compilation - date and time
+        doc["compilation_date"] = __DATE__ ;
+        doc["compilation_time"] = __TIME__ ;
+        //TODO optimise, read once in setup and use const, don't read every time!
+        doc["rssi"] = WiFi.RSSI();
+        doc["MAC"] = WiFi.macAddress();
+        doc["IP"] = WiFi.localIP();
+        doc["uptime"] = uptimeInSecs();
+        doc["reset"] = ESP.getResetReason();
+        doc["mqtt-reconnets"] = reconnectAttemptCounter;
+
+        #if defined (PROXIMITY)
+          const char* sensor_type = PROXIMITY_LABEL;
+        #elif defined (WEIGHT)
+        const char* sensor_type = WEIGHT_LABEL;
+        #elif defined (GYRO)
+          const char* sensor_type = GYRO_LABEL;
+        #elif defined (THERMAL_CAMERA)
+          const char* sensor_type = THERMAL_CAMERA_LABEL;
+        #elif defined (TEST)
+          const char* sensor_type = TEST_LABEL;
+        #elif defined (SOCKET)
+          const char* sensor_type = SOCKET_LABEL;
+        #else
+          const char* sensor_type = "not-defined";
+        #endif
+
+        doc["type"] = sensor_type;
+
+        char out[256];
+        serializeJson(doc, out);
+
+        String sys_topic_json = topic + "/sys";
+        const char * sys_topic_json_char = sys_topic_json.c_str();
+        client.publish(sys_topic_json_char, out);
+
+        #if SERIAL_DEBUG == 1
+          debugln("------ report ------");
+          serializeJsonPretty(doc, Serial);
+          debugln("");
+          debugln("--------------------");
+        #endif
+
+        digitalWrite(sonoff_led_blue, HIGH);
+        // previousReportTime += reportDiff;
+        previousReportTime = millis();
+      }
+    #endif
+
+} // end of if connected to wifi
+
+
 }
