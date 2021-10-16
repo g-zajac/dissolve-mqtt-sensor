@@ -1,4 +1,4 @@
-#define VERSION "1.6.4"
+#define VERSION "1.6.6"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 #define DUMMY            // no sensor connected, just sends random values
@@ -8,7 +8,6 @@
 // #define THERMAL_CAMERA
 // #define SOCKET
 
-#define SENSOR_ID "01"
 //------------------------------------------------------------------------------
 
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -40,6 +39,7 @@
 
 //---------------------------------- LIBRARIES ---------------------------------
 #include <Arduino.h>
+#include "devices.h"
 
 // "" - the same folder <> lib folder
 // #include "sensor_functions.h"
@@ -168,13 +168,11 @@ PubSubClient client(espClient);
   String topicPrefix = MQTT_TOPIC;
 #endif
 
-String unit_id = String(SENSOR_ID);
-String topic = topicPrefix + sensor_type + "/" + unit_id;
-String subscribe_topic = topic + "/relay";
-String mDNSname = sensor_type + "-" + unit_id;
+String topic = "";
+String subscribe_topic = "";
+String mDNSname = "";
 
 bool block_report = false;
-
 
 //--------------------------------- functions ----------------------------------
 
@@ -269,6 +267,9 @@ pinMode(sonoff_led_blue, OUTPUT);
 digitalWrite(sonoff_led_blue, HIGH);  // default off
 
 Serial.begin(115200);
+#if SERIAL_DEBUG == 1
+  delay(3000);
+#endif
 
 debugln("\r\n---------------------------------------");        // compiling info
 debug("Ver: "); debugln(VERSION);
@@ -289,6 +290,30 @@ debug("Vcc: "); debugln(ESP.getVcc());
 debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
+
+// determine unit ID based on devices.h definitions
+int chip_id = ESP.getChipId();
+const device_details *device = devices;
+for (; device->esp_chip_id != 0; device++) {
+  Serial.printf("chip_id %X = %X?\n", chip_id, device->esp_chip_id);
+  if (device->esp_chip_id == chip_id)
+    break;
+}
+if (device->esp_chip_id == 0) {
+    debugln("Could not obtain a chipId we know. Assigning default 99 ID");
+    #ifdef SERIAL_DEBUG
+      Serial.printf("This ESP8266 Chip id = 0x%08X\n", chip_id);
+    #endif
+    String unit_id = "99";
+}
+
+String unit_id = device->id;
+debug("Device ID: "); debugln(unit_id);
+
+topic = topicPrefix + sensor_type + "/" + unit_id;
+subscribe_topic = topic + "/relay";
+mDNSname = sensor_type + "-" + unit_id;
+
 
 //-------------------------------- sensor setup --------------------------------
 #ifdef PROXIMITY
