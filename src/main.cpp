@@ -1,4 +1,4 @@
-#define VERSION "1.6.1"
+#define VERSION "1.6.4"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define TEST            // no sensor connected, just sends random values
@@ -119,12 +119,13 @@ extern "C"{
   unsigned long previousReportTime = millis();
   const unsigned long reportInterval = REPORT_RATE;
   long lastReconnectAttempt = 0;
-  int reconnectAttemptCounter = 0;
+  int mqttConnetionsCounter = 0;
 #endif
 
 unsigned long previousSensorTime = millis();
 const unsigned long sensorInterval = SENSOR_RATE;
 
+int wifiConnetionsCounter = 0;
 WiFiClient espClient;
 WiFiEventHandler wifiConnectHandler;
 WiFiEventHandler wifiDisconnectHandler;
@@ -196,6 +197,7 @@ void onWifiConnect(const WiFiEventStationModeGotIP& event) {
   debug("IP address: ");
   debugln(WiFi.localIP());
   digitalWrite(sonoff_led_blue, HIGH);
+  wifiConnetionsCounter++;
 }
 
 void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
@@ -208,6 +210,7 @@ void onWifiDisconnect(const WiFiEventStationModeDisconnected& event) {
 boolean reconnect() {
   if (client.connect(mDNSname.c_str())) {
     debug("connected, ");
+    mqttConnetionsCounter++;
     client.setKeepAlive(MQTT_ALIVE);
     debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
     client.subscribe(subscribe_topic.c_str());   // resubscribe mqtt
@@ -342,17 +345,17 @@ client.setServer(mqttServer, mqttPort);
 client.setCallback(callback);
 
 
-while (!client.connected()) {
-    debug("Connecting to MQTT...");
-    if (reconnect()){
-      digitalWrite(sonoff_led_blue, HIGH);
-    } else {
-      digitalWrite(sonoff_led_blue, HIGH);
-      debug(" failed with state ");
-      debug(client.state());
-      delay(2000);
-    }
-}
+// while (!client.connected()) {
+//     debug("Connecting to MQTT...");
+//     if (reconnect()){
+//       digitalWrite(sonoff_led_blue, HIGH);
+//     } else {
+//       digitalWrite(sonoff_led_blue, HIGH);
+//       debug(" failed with state ");
+//       debug(client.state());
+//       delay(2000);
+//     }
+// }
 
 // Start the mDNS responder for mDNSname.local
 if (!MDNS.begin(mDNSname)) {
@@ -384,7 +387,7 @@ if (WiFi.status() == WL_CONNECTED){
       // Attempt to reconnect
       if (reconnect()) {
         lastReconnectAttempt = 0;
-        reconnectAttemptCounter++;
+        // mqttConnetionsCounter++;
       }
     }
   } else {
@@ -467,7 +470,7 @@ if (WiFi.status() == WL_CONNECTED){
         char out[1024];
         serializeJson(doc, out);
         // debug("size of json char: "); debugln(sizeof(doc));
-        // debug("message size: "); debugln(strlen(out));
+        // debug("mqtt message size: "); debugln(strlen(out));
         debugln("");
         debugln("data: ");
         debugln(out);
@@ -501,8 +504,12 @@ if (WiFi.status() == WL_CONNECTED){
         debug("JSON Test value: ");
         debugln(out);
 
-        client.publish(data_topic_char, out);
-        // client.publish("dupa/test", "dupa");
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
       #endif
 
       #if defined(PROXIMITY) || defined(WEIGHT)
@@ -533,7 +540,8 @@ if (WiFi.status() == WL_CONNECTED){
         doc["IP"] = WiFi.localIP();
         doc["uptime"] = uptimeInSecs();
         doc["reset"] = ESP.getResetReason();
-        doc["mqtt-reconnets"] = reconnectAttemptCounter;
+        doc["mqtt-connections"] = mqttConnetionsCounter;
+        doc["wifi-connections"] = wifiConnetionsCounter;
 
         #if defined (PROXIMITY)
           const char* sensor_type = PROXIMITY_LABEL;
@@ -556,9 +564,17 @@ if (WiFi.status() == WL_CONNECTED){
         char out[256];
         serializeJson(doc, out);
 
+        debug("mqtt message size: "); debug(strlen(out));
+        debug(", mqtt buffer size: "); debugln(client.getBufferSize());
+        client.setBufferSize(256*2);
+
         String sys_topic_json = topic + "/sys";
-        const char * sys_topic_json_char = sys_topic_json.c_str();
-        client.publish(sys_topic_json_char, out);
+        boolean rc = client.publish(sys_topic_json.c_str(), out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
 
         #if SERIAL_DEBUG == 1
           debugln("------ report ------");
@@ -573,7 +589,6 @@ if (WiFi.status() == WL_CONNECTED){
       }
     #endif
 
-} // end of if connected to wifi
+  } // end of if connected to wifi
 
-
-}
+} // end of loop
