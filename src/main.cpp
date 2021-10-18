@@ -679,7 +679,8 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef STEPPER
         StaticJsonDocument<128> doc;
-        doc["stepper position"] = pos;
+        doc["stepper set position"] = pos;
+        doc["stepper live position"] = stepper.currentPosition();
         char out[128];
         serializeJson(doc, out);
         boolean rc = client.publish(data_topic_char, out);
