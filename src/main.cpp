@@ -1,4 +1,4 @@
-#define VERSION "1.6.9"
+#define VERSION "1.6.9s"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY            // no sensor connected, just sends random values
@@ -7,7 +7,7 @@
 // #define GYRO
 // #define THERMAL_CAMERA
 // #define SOCKET
-// #define SERVO
+// #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 #define STEPPER
 
 //------------------------------------------------------------------------------
@@ -102,6 +102,9 @@ extern "C"{
 
 #ifdef STEPPER
   #include <AccelStepper.h>
+
+  #define STEPPER_MAX_SPEED 500
+  #define STEPPER_ACC 100
 #endif
 
 
@@ -149,8 +152,9 @@ extern "C"{
 
 #ifdef STEPPER
   // Define a stepper and the pins it will use
-  // 1 - DRIVER, 4 - step, 14 dir
-  AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
+  // 1 - DRIVER, 4 (SDA) - step, 14 (SCLK) dir
+  AccelStepper stepper(AccelStepper::DRIVER, 4, 14);
+  // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -176,7 +180,7 @@ PubSubClient client(espClient);
 #endif
 
 #ifdef STEPPER
-  int pos = 6600;
+  int pos = 500;
 #endif
 
 //------------------------------------------------------------------------------
@@ -223,11 +227,12 @@ PubSubClient client(espClient);
 #endif
 
 String topic = "";
-String subscribe_topic = "";
+String subscribe_topic_relay = "";
+String subscribe_topic_stepper = "";
 String mDNSname = "";
 String button_topic = "";
 
-bool block_report = false;
+// bool block_report = false;
 
 //--------------------------------- functions ----------------------------------
 
@@ -268,8 +273,12 @@ boolean reconnect() {
     mqttConnetionsCounter++;
     client.setKeepAlive(MQTT_ALIVE);
     debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
-    client.subscribe(subscribe_topic.c_str());   // resubscribe mqtt
-    debug("subscribed for topic: "); debugln(subscribe_topic);
+    client.subscribe(subscribe_topic_relay.c_str());   // resubscribe mqtt
+    #ifdef STEPPER
+      client.subscribe(subscribe_topic_stepper.c_str());
+      debug("subscribed for topic: "); debugln(subscribe_topic_stepper);
+    #endif
+    debug("subscribed for topic: "); debugln(subscribe_topic_relay);
   }
   return client.connected();
 }
@@ -294,7 +303,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("- - - - - - - - - - - - -");
   debug("Message arrived in topic: ");
   debugln(topic);
-  debug("Message:");
+  debug("Message: ");
 
   String messageTemp;
   for (int i = 0; i < length; i++) {
@@ -304,7 +313,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("");
 
   //TODO subscribe multiple topics - with strcmp - https://www.baldengineer.com/multiple-mqtt-topics-pubsubclient.html
-  if (String(topic) == subscribe_topic.c_str()){
+  if (String(topic) == subscribe_topic_relay.c_str()){
     if (messageTemp == "on"){
       debugln("relay turned ON");
       digitalWrite(relay_pin, HIGH);
@@ -313,6 +322,34 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(relay_pin, LOW);
     }
   }
+
+  #ifdef STEPPER
+
+  // Convert the payload
+  // char format[16];
+  // snprintf(format, sizeof format, "%%%ud", length);
+  // int payload_value = 0;
+  // if (sscanf((const char *) payload, format, &payload_value) == 1)
+  //   Serial.println(payload_value);
+  // else
+  //   ; // Conversion error occurred
+
+  if (String(topic) == subscribe_topic_stepper.c_str()){
+    int payload_value = atoi((char*)payload);
+    debug("received position message "); debugln(payload_value);
+    // TODO add global limits and homeing
+    if (payload_value < 0) {
+      pos = 0;
+    } else if (payload_value >= 0 && payload_value < 500){
+      pos = payload_value;
+    } else if (payload_value > 500) {pos = 500;}
+    else {debug("received wrong format stepper position: "); debugln(payload_value);}
+  }
+
+  debug("moving motor to: "); debugln(pos);
+  stepper.moveTo(pos);
+  #endif
+
   debugln("- - - - - - - - - - - - -");
   debugln("");
 }
@@ -368,7 +405,10 @@ String unit_id = device->id;
 debug("Device ID: "); debugln(unit_id);
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
-subscribe_topic = topic + "/relay";
+subscribe_topic_relay = topic + "/relay";
+#ifdef STEPPER
+  subscribe_topic_stepper = topic + "/set";
+#endif
 mDNSname = sensor_type + "-" + unit_id;
 
 #ifdef BUTTON
@@ -430,9 +470,10 @@ mDNSname = sensor_type + "-" + unit_id;
 #endif
 
 #ifdef STEPPER
-  stepper.setMaxSpeed(10000);
-  stepper.setAcceleration(1000);
-  stepper.moveTo(500);
+  // stepper set to 16 microsteps
+  stepper.setMaxSpeed(STEPPER_MAX_SPEED);
+  stepper.setAcceleration(STEPPER_ACC);
+  stepper.moveTo(500);  // TODO test purpose only, add homeing, remove
 #endif
 
 //------------------------------------------------------------------------------
@@ -506,9 +547,13 @@ if (WiFi.status() == WL_CONNECTED){
     gyro.read();
   #endif
 
+  #ifdef STEPPER
+    stepper.run();
+  #endif
+
   unsigned long sensorDiff = millis() - previousSensorTime;
     if((sensorDiff > sensorInterval) && client.connected()) {
-      block_report = true;
+      // block_report = true;
       digitalWrite(sonoff_led_blue, LOW);
 
       String data_topic = topic + "/data";
@@ -633,21 +678,8 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef STEPPER
-        // stepper test
-        debugln("running stepper");
-        debug("stepper distance to go: "); debugln(stepper.distanceToGo());
-        if (stepper.distanceToGo() == 0)
-          {
-            delay(500);
-            pos = -pos;
-            stepper.moveTo(pos);
-          }
-          stepper.run();
-
-        int stepper_position = 90;
-
         StaticJsonDocument<128> doc;
-        doc["valve position"] = stepper_position;
+        doc["stepper position"] = pos;
         char out[128];
         serializeJson(doc, out);
         boolean rc = client.publish(data_topic_char, out);
@@ -659,13 +691,13 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       previousSensorTime = millis();
-      block_report = false;
+      // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
   }
 
   #ifdef MQTT_REPORT
     unsigned long reportDiff = millis() - previousReportTime;
-      if((reportDiff > reportInterval) && !block_report && client.connected()){
+      if((reportDiff > reportInterval) && client.connected()){
 
         digitalWrite(sonoff_led_blue, LOW);
 
