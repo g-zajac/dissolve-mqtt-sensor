@@ -1,4 +1,4 @@
-#define VERSION "1.6.8"
+#define VERSION "1.6.9"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY            // no sensor connected, just sends random values
@@ -7,7 +7,8 @@
 // #define GYRO
 // #define THERMAL_CAMERA
 // #define SOCKET
-#define SERVO
+// #define SERVO
+#define STEPPER
 
 //------------------------------------------------------------------------------
 
@@ -19,6 +20,7 @@
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
 #define SERVO_LABEL "servo"
+#define STEPPER_LABEL "stepper"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -98,6 +100,11 @@ extern "C"{
   uint8_t servonum = 0;
 #endif
 
+#ifdef STEPPER
+  #include <AccelStepper.h>
+#endif
+
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -140,6 +147,11 @@ extern "C"{
   //
 #endif
 
+#ifdef STEPPER
+  // Define a stepper and the pins it will use
+  // 1 - DRIVER, 4 - step, 14 dir
+  AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
+#endif
 
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
@@ -161,6 +173,10 @@ PubSubClient client(espClient);
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
   long t;
+#endif
+
+#ifdef STEPPER
+  int pos = 6600;
 #endif
 
 //------------------------------------------------------------------------------
@@ -192,6 +208,10 @@ PubSubClient client(espClient);
 #ifdef SERVO
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SERVO_LABEL;
+#endif
+#ifdef STEPPER
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = STEPPER_LABEL;
 #endif
 
 
@@ -409,6 +429,12 @@ mDNSname = sensor_type + "-" + unit_id;
   pwm.setPWM(servonum, 0, SERVOMIN); // set home
 #endif
 
+#ifdef STEPPER
+  stepper.setMaxSpeed(10000);
+  stepper.setAcceleration(1000);
+  stepper.moveTo(500);
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -606,6 +632,32 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef STEPPER
+        // stepper test
+        debugln("running stepper");
+        debug("stepper distance to go: "); debugln(stepper.distanceToGo());
+        if (stepper.distanceToGo() == 0)
+          {
+            delay(500);
+            pos = -pos;
+            stepper.moveTo(pos);
+          }
+          stepper.run();
+
+        int stepper_position = 90;
+
+        StaticJsonDocument<128> doc;
+        doc["valve position"] = stepper_position;
+        char out[128];
+        serializeJson(doc, out);
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
       previousSensorTime = millis();
       block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
@@ -645,6 +697,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = SOCKET_LABEL;
         #elif defined (SERVO)
           const char* sensor_type = SERVO_LABEL;
+        #elif defined (STEPPER)
+          const char* sensor_type = STEPPER_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
