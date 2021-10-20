@@ -5,10 +5,10 @@
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
-#define STEPPER
+// #define STEPPER
 
 //------------------------------------------------------------------------------
 
@@ -443,6 +443,7 @@ mDNSname = sensor_type + "-" + unit_id;
 #endif
 
 #ifdef THERMAL_CAMERA
+  Wire.begin(4,14);
   bool status;
   // default settings
   status = amg.begin();
