@@ -1,12 +1,14 @@
-#define VERSION "1.6.7"
+#define VERSION "1.6.9s"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY            // no sensor connected, just sends random values
+// #define DUMMY            // no sensor connected, just sends random values
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 // #define THERMAL_CAMERA
 // #define SOCKET
+// #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
+#define STEPPER
 
 //------------------------------------------------------------------------------
 
@@ -17,6 +19,8 @@
 #define GYRO_LABEL "gyro"
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
+#define SERVO_LABEL "servo"
+#define STEPPER_LABEL "stepper"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -83,6 +87,27 @@ extern "C"{
 
 // SOCKET does not have any sensor
 
+#ifdef SERVO
+  #include <Adafruit_PWMServoDriver.h>
+  Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
+
+  #define SERVOMIN  150 // This is the 'minimum' pulse length count (out of 4096)
+  #define SERVOMAX  600 // This is the 'maximum' pulse length count (out of 4096)
+  #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
+
+  int servo_position = 0; // home valve closed? in degrees
+  // our servo # number
+  uint8_t servonum = 0;
+#endif
+
+#ifdef STEPPER
+  #include <AccelStepper.h>
+
+  #define STEPPER_MAX_SPEED 500
+  #define STEPPER_ACC 100
+#endif
+
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -121,6 +146,17 @@ extern "C"{
   #define relay_pin 12 //TH relay with red LED
 #endif
 
+#ifdef SERVO
+  //
+#endif
+
+#ifdef STEPPER
+  // Define a stepper and the pins it will use
+  // 1 - DRIVER, 4 (SDA) - step, 14 (SCLK) dir
+  AccelStepper stepper(AccelStepper::DRIVER, 4, 14);
+  // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -141,6 +177,10 @@ PubSubClient client(espClient);
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
   long t;
+#endif
+
+#ifdef STEPPER
+  int pos = 500;
 #endif
 
 //------------------------------------------------------------------------------
@@ -169,6 +209,14 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SOCKET_LABEL;
 #endif
+#ifdef SERVO
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = SERVO_LABEL;
+#endif
+#ifdef STEPPER
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = STEPPER_LABEL;
+#endif
 
 
 // form mqtt topic based on template and id
@@ -179,11 +227,12 @@ PubSubClient client(espClient);
 #endif
 
 String topic = "";
-String subscribe_topic = "";
+String subscribe_topic_relay = "";
+String subscribe_topic_stepper = "";
 String mDNSname = "";
 String button_topic = "";
 
-bool block_report = false;
+// bool block_report = false;
 
 //--------------------------------- functions ----------------------------------
 
@@ -224,8 +273,12 @@ boolean reconnect() {
     mqttConnetionsCounter++;
     client.setKeepAlive(MQTT_ALIVE);
     debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
-    client.subscribe(subscribe_topic.c_str());   // resubscribe mqtt
-    debug("subscribed for topic: "); debugln(subscribe_topic);
+    client.subscribe(subscribe_topic_relay.c_str());   // resubscribe mqtt
+    #ifdef STEPPER
+      client.subscribe(subscribe_topic_stepper.c_str());
+      debug("subscribed for topic: "); debugln(subscribe_topic_stepper);
+    #endif
+    debug("subscribed for topic: "); debugln(subscribe_topic_relay);
   }
   return client.connected();
 }
@@ -250,7 +303,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("- - - - - - - - - - - - -");
   debug("Message arrived in topic: ");
   debugln(topic);
-  debug("Message:");
+  debug("Message: ");
 
   String messageTemp;
   for (int i = 0; i < length; i++) {
@@ -259,7 +312,8 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   debugln("");
 
-  if (String(topic) == subscribe_topic.c_str()){
+  //TODO subscribe multiple topics - with strcmp - https://www.baldengineer.com/multiple-mqtt-topics-pubsubclient.html
+  if (String(topic) == subscribe_topic_relay.c_str()){
     if (messageTemp == "on"){
       debugln("relay turned ON");
       digitalWrite(relay_pin, HIGH);
@@ -268,9 +322,38 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(relay_pin, LOW);
     }
   }
+
+  #ifdef STEPPER
+
+  // Convert the payload
+  // char format[16];
+  // snprintf(format, sizeof format, "%%%ud", length);
+  // int payload_value = 0;
+  // if (sscanf((const char *) payload, format, &payload_value) == 1)
+  //   Serial.println(payload_value);
+  // else
+  //   ; // Conversion error occurred
+
+  if (String(topic) == subscribe_topic_stepper.c_str()){
+    int payload_value = atoi((char*)payload);
+    debug("received position message "); debugln(payload_value);
+    // TODO add global limits and homeing
+    if (payload_value < 0) {
+      pos = 0;
+    } else if (payload_value >= 0 && payload_value < 500){
+      pos = payload_value;
+    } else if (payload_value > 500) {pos = 500;}
+    else {debug("received wrong format stepper position: "); debugln(payload_value);}
+  }
+
+  debug("moving motor to: "); debugln(pos);
+  stepper.moveTo(pos);
+  #endif
+
   debugln("- - - - - - - - - - - - -");
   debugln("");
 }
+
 
 //=================================== SETUP ====================================
 void setup() {
@@ -322,7 +405,10 @@ String unit_id = device->id;
 debug("Device ID: "); debugln(unit_id);
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
-subscribe_topic = topic + "/relay";
+subscribe_topic_relay = topic + "/relay";
+#ifdef STEPPER
+  subscribe_topic_stepper = topic + "/set";
+#endif
 mDNSname = sensor_type + "-" + unit_id;
 
 #ifdef BUTTON
@@ -374,6 +460,20 @@ mDNSname = sensor_type + "-" + unit_id;
 #ifndef SOCKET
   pinMode(relay_pin, OUTPUT);
   digitalWrite(relay_pin, LOW); // default off
+#endif
+
+#ifdef SERVO
+  pwm.begin();
+  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~60 Hz updates
+  delay(100);
+  pwm.setPWM(servonum, 0, SERVOMIN); // set home
+#endif
+
+#ifdef STEPPER
+  // stepper set to 16 microsteps
+  stepper.setMaxSpeed(STEPPER_MAX_SPEED);
+  stepper.setAcceleration(STEPPER_ACC);
+  stepper.moveTo(500);  // TODO test purpose only, add homeing, remove
 #endif
 
 //------------------------------------------------------------------------------
@@ -447,9 +547,13 @@ if (WiFi.status() == WL_CONNECTED){
     gyro.read();
   #endif
 
+  #ifdef STEPPER
+    stepper.run();
+  #endif
+
   unsigned long sensorDiff = millis() - previousSensorTime;
     if((sensorDiff > sensorInterval) && client.connected()) {
-      block_report = true;
+      // block_report = true;
       digitalWrite(sonoff_led_blue, LOW);
 
       String data_topic = topic + "/data";
@@ -556,14 +660,45 @@ if (WiFi.status() == WL_CONNECTED){
         client.publish(data_topic_char, data_char);
       #endif
 
+      #ifdef SERVO
+        servo_position = 90;
+        int pulselength = map(servo_position, 0, 180, SERVOMIN, SERVOMAX);
+        pwm.setPWM(servonum, 0, pulselength);
+
+        StaticJsonDocument<128> doc;
+        doc["valve position"] = servo_position;
+        char out[128];
+        serializeJson(doc, out);
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef STEPPER
+        StaticJsonDocument<128> doc;
+        doc["stepper set position"] = pos;
+        doc["stepper live position"] = stepper.currentPosition();
+        char out[128];
+        serializeJson(doc, out);
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
       previousSensorTime = millis();
-      block_report = false;
+      // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
   }
 
   #ifdef MQTT_REPORT
     unsigned long reportDiff = millis() - previousReportTime;
-      if((reportDiff > reportInterval) && !block_report && client.connected()){
+      if((reportDiff > reportInterval) && client.connected()){
 
         digitalWrite(sonoff_led_blue, LOW);
 
@@ -593,6 +728,10 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = DUMMY_LABEL;
         #elif defined (SOCKET)
           const char* sensor_type = SOCKET_LABEL;
+        #elif defined (SERVO)
+          const char* sensor_type = SERVO_LABEL;
+        #elif defined (STEPPER)
+          const char* sensor_type = STEPPER_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
