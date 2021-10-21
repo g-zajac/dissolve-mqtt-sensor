@@ -5,10 +5,11 @@
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-#define THERMAL_CAMERA
+// #define THERMAL_CAMERA
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
+#define GESTURE
 
 //------------------------------------------------------------------------------
 
@@ -21,6 +22,7 @@
 #define SOCKET_LABEL "socket"
 #define SERVO_LABEL "servo"
 #define STEPPER_LABEL "stepper"
+#define GESTURE_LABEL "gesture"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -61,7 +63,7 @@ extern "C"{
 
 #ifdef BUTTON
   #include <Bounce2.h>
-  Bounce b = Bounce();
+  Bounce bb = Bounce();
 #endif
 
 #ifdef OTA
@@ -107,6 +109,9 @@ extern "C"{
   #define STEPPER_ACC 100
 #endif
 
+#ifdef GESTURE
+  #include <Arduino_APDS9960.h>
+#endif
 
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
@@ -157,6 +162,12 @@ extern "C"{
   // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
+#ifdef GESTURE
+  // + black sleeve, - green
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -181,6 +192,12 @@ PubSubClient client(espClient);
 
 #ifdef STEPPER
   int pos = 500;
+#endif
+
+#ifdef GESTURE
+  int proximity = 0;
+  int r = 0, g = 0, b = 0;
+  int gesture = 0;
 #endif
 
 //------------------------------------------------------------------------------
@@ -216,6 +233,10 @@ PubSubClient client(espClient);
 #ifdef STEPPER
   const unsigned long sensorInterval = 1000;
   const String sensor_type = STEPPER_LABEL;
+#endif
+#ifdef GESTURE
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = GESTURE_LABEL;
 #endif
 
 
@@ -412,8 +433,8 @@ subscribe_topic_relay = topic + "/relay";
 mDNSname = sensor_type + "-" + unit_id;
 
 #ifdef BUTTON
-  b.attach(sonoff_button_pin,INPUT_PULLUP); // Attach the debouncer to a pin with INPUT_PULLUP mode
-  b.interval(25); // Use a debounce interval of 25 milliseconds
+  bb.attach(sonoff_button_pin,INPUT_PULLUP); // Attach the debouncer to a pin with INPUT_PULLUP mode
+  bb.interval(25); // Use a debounce interval of 25 milliseconds
   button_topic = topic + "/button";
 #endif
 
@@ -477,6 +498,14 @@ mDNSname = sensor_type + "-" + unit_id;
   stepper.moveTo(500);  // TODO test purpose only, add homeing, remove
 #endif
 
+#ifdef GESTURE
+  Wire.begin(sda_pin, clk_pin);
+  if (!APDS.begin()) {
+  Serial.println("Error initializing APDS-9960 sensor.");
+  while (true); // Stop forever
+  }
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -527,8 +556,8 @@ if (WiFi.status() == WL_CONNECTED){
   } //end of mqtt connection reconnecting
 
   #ifdef BUTTON
-    b.update(); // Update the Bounce instance
-    if ( b.fell() ) {  // Call code if button transitions from HIGH to LOW
+    bb.update(); // Update the Bounce instance
+    if ( bb.fell() ) {  // Call code if button transitions from HIGH to LOW
       debugln("button pressed!");
       boolean rc = client.publish(button_topic.c_str(), "button pressed");
       if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
@@ -551,6 +580,24 @@ if (WiFi.status() == WL_CONNECTED){
   #ifdef STEPPER
     stepper.run();
   #endif
+
+  #ifdef GESTURE
+  // Check if a proximity reading is available.
+    if (APDS.proximityAvailable()) {
+    proximity = APDS.readProximity();
+    }
+
+    // Check if a gesture reading is available
+    if (APDS.gestureAvailable()) {
+    gesture = APDS.readGesture();
+    }
+
+    // Check if a color reading is available
+    if (APDS.colorAvailable()) {
+    APDS.readColor(r, g, b);
+    }
+  #endif
+
 
   unsigned long sensorDiff = millis() - previousSensorTime;
     if((sensorDiff > sensorInterval) && client.connected()) {
@@ -692,6 +739,24 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef GESTURE
+        StaticJsonDocument<128> doc;
+        doc["proximity"] = proximity;
+        doc["gesture"] = gesture;
+        JsonArray data = doc.createNestedArray("RGB");
+        data.add(r); data.add(g); data.add(b);
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
       previousSensorTime = millis();
       // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
@@ -733,6 +798,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = SERVO_LABEL;
         #elif defined (STEPPER)
           const char* sensor_type = STEPPER_LABEL;
+        #elif defined (GESTURE)
+            const char* sensor_type = GESTURE_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
