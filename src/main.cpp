@@ -6,10 +6,11 @@
 // #define TOF1
 // #define GESTURE
 #define HUMIDITY
+// #define THERMAL_CAMERA
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
-// #define THERMAL_CAMERA
+
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
@@ -154,6 +155,8 @@ extern "C"{
 
 #ifdef THERMAL_CAMERA
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
 #endif
 
 // NOTE different pin on socket? TH? to check
@@ -176,12 +179,16 @@ extern "C"{
   // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(HUMIDITY) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
 #endif
 
+#ifdef HUMIDITY
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
+#endif
 
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
@@ -234,7 +241,7 @@ PubSubClient client(espClient);
   const String sensor_type = GYRO_LABEL;
 #endif
 #ifdef THERMAL_CAMERA
-  const unsigned long sensorInterval = 1000;
+  const unsigned long sensorInterval = 500;
   const String sensor_type = THERMAL_CAMERA_LABEL;
 #endif
 #ifdef SOCKET
@@ -575,11 +582,27 @@ mDNSname = unit_id;
 #endif
 
 #ifdef HUMIDITY
-  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin(4, 14);
+  // TODO check error, wrong readings if not defined directly
   // Default settings:
   //  - Heater off
   //  - 14 bit Temperature and Humidity Measurement Resolutions
   hdc1080.begin(0x40);
+
+  // delay(5000);
+  // Serial.print("Manufacturer ID=0x");
+	// Serial.println(hdc1080.readManufacturerId(), HEX); // 0x5449 ID of Texas Instruments
+	// Serial.print("Device ID=0x");
+	// Serial.println(hdc1080.readDeviceId(), HEX); // 0x1050 ID of the device
+  // uint8_t huTime = 10;
+  // Serial.print("Heating up for approx. ");
+  // Serial.print(huTime);
+  // Serial.println(" seconds. Please wait...");
+  //
+  // hdc1080.heatUp(huTime);
+  // hdc1080.heatUp(10); // approx 10 sec
+  // delay(10000);
 #endif
 
 //------------------------------------------------------------------------------
@@ -726,7 +749,7 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef THERMAL_CAMERA
         StaticJsonDocument<1024> doc;
-        JsonArray data = doc.createNestedArray("image");
+        JsonArray data = doc.createNestedArray("value");
         amg.readPixels(pixels);
 
         for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
@@ -860,7 +883,9 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef HUMIDITY
         StaticJsonDocument<128> doc;
+        delay(20);
         doc["humidity"] = hdc1080.readHumidity();
+        delay(20);
         doc["temeperature"] = hdc1080.readTemperature();
 
         char out[128];
