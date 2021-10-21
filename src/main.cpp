@@ -10,7 +10,8 @@
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
 // #define GESTURE
-#define TOF1
+// #define TOF1
+#define HUMIDITY
 
 //------------------------------------------------------------------------------
 
@@ -25,6 +26,7 @@
 #define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
 #define TOF1_LABEL "tof1"
+#define HUMIDITY_LABEL "humidity"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -121,6 +123,12 @@ extern "C"{
   VL53L1X sensor;
 #endif
 
+#ifdef HUMIDITY
+  #include <Wire.h>
+  #include "ClosedCube_HDC1080.h"
+
+  ClosedCube_HDC1080 hdc1080;
+#endif
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -176,11 +184,12 @@ extern "C"{
   #define clk_pin 14//D5 SCLK - red
 #endif
 
-#ifdef TOF1
+#if defined(TOF1) || defined(HUMIDITY)
   // + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
 #endif
+
 
 //------------------------------- VARs declarations ----------------------------
 #ifdef MQTT_REPORT
@@ -255,6 +264,10 @@ PubSubClient client(espClient);
 #ifdef TOF1
   const unsigned long sensorInterval = 1000;
   const String sensor_type = TOF1_LABEL;
+#endif
+#ifdef HUMIDITY
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = HUMIDITY_LABEL;
 #endif
 
 
@@ -549,6 +562,14 @@ mDNSname = sensor_type + "-" + unit_id;
   sensor.startContinuous(50);
 #endif
 
+#ifdef HUMIDITY
+  Wire.begin(sda_pin, clk_pin);
+  // Default settings:
+  //  - Heater off
+  //  - 14 bit Temperature and Humidity Measurement Resolutions
+  hdc1080.begin(0x40);
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -818,7 +839,22 @@ if (WiFi.status() == WL_CONNECTED){
           digitalWrite(sonoff_led_blue, LOW);
         }
         else debugln("MQTT data send successfully");
+      #endif
 
+      #ifdef HUMIDITY
+        StaticJsonDocument<128> doc;
+        doc["humidity"] = hdc1080.readHumidity();
+        doc["temeperature"] = hdc1080.readTemperature();
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
       #endif
 
       previousSensorTime = millis();
@@ -864,6 +900,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = STEPPER_LABEL;
         #elif defined (GESTURE)
             const char* sensor_type = GESTURE_LABEL;
+        #elif defined (HUMIDITY)
+            const char* sensor_type = HUMIDITY_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
