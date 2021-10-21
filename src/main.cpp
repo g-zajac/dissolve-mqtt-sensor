@@ -5,8 +5,9 @@
 // #define TOF0
 // #define TOF1
 // #define GESTURE
-#define HUMIDITY
+// #define HUMIDITY
 // #define THERMAL_CAMERA
+#define RGB
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
@@ -32,7 +33,7 @@
 #define TOF0_LABEL "proximity"
 #define TOF1_LABEL "proximity"
 #define HUMIDITY_LABEL "humidity"
-
+#define RGB_LABEL "light"
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
 #define MQTT_ALIVE 60                                   // alive time in secs
@@ -94,6 +95,17 @@ extern "C"{
   #include <Wire.h>
   #include <SPI.h>
   Adafruit_AMG88xx amg;
+#endif
+
+#ifdef RGB
+  #include <Wire.h>
+  #include "Adafruit_TCS34725.h"
+  /* Initialise with default values (int time = 2.4ms, gain = 1x) */
+  Adafruit_TCS34725 tcs = Adafruit_TCS34725();
+
+  /* Initialise with specific int time and gain values */
+  // Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_614MS, TCS34725_GAIN_1X);
+
 #endif
 
 // SOCKET does not have any sensor
@@ -179,7 +191,7 @@ extern "C"{
   // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT) || defined(RGB)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -220,6 +232,10 @@ PubSubClient client(espClient);
   int proximity = 0;
   int r = 0, g = 0, b = 0;
   int gesture = 0;
+#endif
+
+#ifdef RGB
+  uint16_t r, g, b, c, colorTemp, lux;
 #endif
 
 //------------------------------------------------------------------------------
@@ -271,6 +287,10 @@ PubSubClient client(espClient);
 #ifdef HUMIDITY
   const unsigned long sensorInterval = 1000;
   const String sensor_type = HUMIDITY_LABEL;
+#endif
+#ifdef RGB
+  const unsigned long sensorInterval = 500;
+  const String sensor_type = RGB_LABEL;
 #endif
 
 
@@ -505,6 +525,17 @@ mDNSname = unit_id;
   if (!status) {
       debugln("Could not find a valid AMG88xx sensor, check wiring!");
       while (1);
+  }
+#endif
+
+#ifdef RGB
+  Wire.begin(sda_pin, clk_pin);
+  delay(20);
+  if (tcs.begin()) {
+    debugln("Found sensor");
+  } else {
+    debugln("No TCS34725 found ... check your connections");
+  while (1);
   }
 #endif
 
@@ -776,6 +807,24 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef RGB
+        tcs.getRawData(&r, &g, &b, &c);
+        // colorTemp = tcs.calculateColorTemperature(r, g, b);
+
+        StaticJsonDocument<128> doc;
+        doc["colortemp"] = tcs.calculateColorTemperature_dn40(r, g, b, c);
+        doc["lux"] = tcs.calculateLux(r, g, b);
+        JsonArray data = doc.createNestedArray("colour");
+          data.add(r); data.add(g); data.add(b); data.add(c);
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
       #ifdef DUMMY
         StaticJsonDocument<256> doc;
         doc["data"] = "dummy";
@@ -949,6 +998,8 @@ if (WiFi.status() == WL_CONNECTED){
             const char* sensor_type = TOF0_LABEL;
         #elif defined (TOF1)
             const char* sensor_type = TOF1_LABEL;
+        #elif defined (RGB)
+            const char* sensor_type = RGB_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
