@@ -6,16 +6,18 @@ typedef struct _DD {
 
 // current
 const device_details devices[] = {
-  {0x0065B6C7, "001"},
-  {0x00AAA13E, "002"},
-  {0x0065AFD6, "003"},
-  {0x0066455C, "004"},
-  {0x0066425C, "005"},
+  // ---------------------- PROXIMITY --------------------------
+  {0x0065B6C7, "001"},  // proximity TOF1 - VL53L1X - 4m
+  {0x00AAA13E, "002"},  // proximity TOF1 - VL52L1X - 4m pololu
+  {0x0065AFD6, "003"},  // proximity TOF0 - VL52L0X - 2m
+  {0x0066455C, "004"},  // proximity TOF0 - VL52L0X - 2m
+  {0x0066425C, "005"},  // gesture/proximity/colour
   {0x0065C28B, "006"},
   {0x0066465D, "007"},
   {0x00A97FCC, "008"},
   {0x0065EAC7, "009"},
-  {0x00666608, "010"},
+  // ---------------------- OTHERS -----------------------------
+  {0x00666608, "010"},  // Temperature & Humidity
   {0x0066460B, "011"},
   {0x00A8F31B, "012"},
   {0x00664624, "013"},
