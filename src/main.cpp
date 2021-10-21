@@ -1,4 +1,4 @@
-#define VERSION "1.6.9s"
+#define VERSION "1.7.0"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY            // no sensor connected, just sends random values
@@ -10,8 +10,8 @@
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
 // #define GESTURE
-// #define TOF1
-#define HUMIDITY
+#define TOF1
+// #define HUMIDITY
 
 //------------------------------------------------------------------------------
 
@@ -461,7 +461,7 @@ subscribe_topic_relay = topic + "/relay";
 #ifdef STEPPER
   subscribe_topic_stepper = topic + "/set";
 #endif
-mDNSname = sensor_type + "-" + unit_id;
+mDNSname = unit_id;
 
 #ifdef BUTTON
   bb.attach(sonoff_button_pin,INPUT_PULLUP); // Attach the debouncer to a pin with INPUT_PULLUP mode
@@ -484,7 +484,7 @@ mDNSname = sensor_type + "-" + unit_id;
 
 #ifdef GYRO
   // Wire.begin(sda_pin, clk_pin);
-  Wire.begin();
+  Wire.begin(sda_pin, clk_pin);
   if (!gyro.init())
   {
     debugln("Failed to autodetect gyro type!");
@@ -495,7 +495,7 @@ mDNSname = sensor_type + "-" + unit_id;
 #endif
 
 #ifdef THERMAL_CAMERA
-  Wire.begin(4,14);
+  Wire.begin(sda_pin, clk_pin);
   bool status;
   // default settings
   status = amg.begin();
