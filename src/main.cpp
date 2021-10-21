@@ -2,6 +2,10 @@
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY            // no sensor connected, just sends random values
+// #define TOF0
+// #define TOF1
+// #define GESTURE
+#define HUMIDITY
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
@@ -9,9 +13,8 @@
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
-// #define GESTURE
-#define TOF1
-// #define HUMIDITY
+
+
 
 //------------------------------------------------------------------------------
 
@@ -25,7 +28,8 @@
 #define SERVO_LABEL "servo"
 #define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
-#define TOF1_LABEL "tof1"
+#define TOF0_LABEL "proximity"
+#define TOF1_LABEL "proximity"
 #define HUMIDITY_LABEL "humidity"
 
 #define MQTT_TOPIC "resonance/sensor/"
@@ -117,6 +121,12 @@ extern "C"{
   #include <Arduino_APDS9960.h>
 #endif
 
+#ifdef TOF0
+  #include <Wire.h>
+  #include <VL53L0X.h>
+  VL53L0X sensor;
+#endif
+
 #ifdef TOF1
   #include <Wire.h>
   #include <VL53L1X.h>
@@ -140,18 +150,6 @@ extern "C"{
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
   #define trigPin 4 //D2 SDA
   #define echoPin 14//D5 SCLK
-#endif
-
-#ifdef WEIGHT
-  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define sda_pin 4 //D2 SDA - orange/white
-  #define clk_pin 14//D5 SCLK - blue/white
-#endif
-
-#ifdef GYRO
-  // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define sda_pin 4 //D2 SDA - orange/white
-  #define clk_pin 14//D5 SCLK - blue/white
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -178,14 +176,8 @@ extern "C"{
   // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
-#ifdef GESTURE
-  // + black sleeve, - green
-  #define sda_pin 4 //D2 SDA - white
-  #define clk_pin 14//D5 SCLK - red
-#endif
-
-#if defined(TOF1) || defined(HUMIDITY)
-  // + black sleeve, - green
+#if defined(TOF0) || defined(TOF1) || defined(HUMIDITY) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT)
+  // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
 #endif
@@ -258,11 +250,15 @@ PubSubClient client(espClient);
   const String sensor_type = STEPPER_LABEL;
 #endif
 #ifdef GESTURE
-  const unsigned long sensorInterval = 1000;
+  const unsigned long sensorInterval = 500;
   const String sensor_type = GESTURE_LABEL;
 #endif
+#ifdef TOF0
+  const unsigned long sensorInterval = 300;
+  const String sensor_type = TOF0_LABEL;
+#endif
 #ifdef TOF1
-  const unsigned long sensorInterval = 1000;
+  const unsigned long sensorInterval = 300;
   const String sensor_type = TOF1_LABEL;
 #endif
 #ifdef HUMIDITY
@@ -537,6 +533,22 @@ mDNSname = unit_id;
   }
 #endif
 
+#ifdef TOF0
+  Wire.begin(sda_pin, clk_pin);
+  sensor.setTimeout(500);
+  if (!sensor.init())
+  {
+    Serial.println("Failed to detect and initialize sensor!");
+    while (1) {}
+  }
+
+  // Start continuous back-to-back mode (take readings as
+  // fast as possible).  To use continuous timed mode
+  // instead, provide a desired inter-measurement period in
+  // ms (e.g. sensor.startContinuous(100)).
+  sensor.startContinuous(50);
+#endif
+
 #ifdef TOF1
   Wire.begin(sda_pin, clk_pin);
   Wire.setClock(400000); // use 400 kHz I2C
@@ -807,7 +819,7 @@ if (WiFi.status() == WL_CONNECTED){
         StaticJsonDocument<128> doc;
         doc["proximity"] = proximity;
         doc["gesture"] = gesture;
-        JsonArray data = doc.createNestedArray("RGB");
+        JsonArray data = doc.createNestedArray("colour");
         data.add(r); data.add(g); data.add(b);
 
         char out[128];
@@ -821,9 +833,14 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef TOF1
+      #if defined(TOF0) || defined(TOF1)
         StaticJsonDocument<128> doc;
-        doc["proximity"] = sensor.read();
+        #ifdef TOF0
+          doc["value"] = sensor.readRangeSingleMillimeters();
+        #endif
+        #ifdef TOF1
+          doc["value"] = sensor.read();
+        #endif
         if (sensor.timeoutOccurred()){
           doc["timeout"] = true;
         } else {
@@ -881,6 +898,7 @@ if (WiFi.status() == WL_CONNECTED){
         doc["reset"] = ESP.getResetReason();
         doc["mqtt-connections"] = mqttConnetionsCounter;
         doc["wifi-connections"] = wifiConnetionsCounter;
+        doc["sampling"] = sensorInterval;
 
         #if defined (PROXIMITY)
           const char* sensor_type = PROXIMITY_LABEL;
@@ -902,6 +920,10 @@ if (WiFi.status() == WL_CONNECTED){
             const char* sensor_type = GESTURE_LABEL;
         #elif defined (HUMIDITY)
             const char* sensor_type = HUMIDITY_LABEL;
+        #elif defined (TOF0)
+            const char* sensor_type = TOF0_LABEL;
+        #elif defined (TOF1)
+            const char* sensor_type = TOF1_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif
