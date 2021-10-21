@@ -9,7 +9,8 @@
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
 // #define STEPPER
-#define GESTURE
+// #define GESTURE
+#define TOF1
 
 //------------------------------------------------------------------------------
 
@@ -23,6 +24,7 @@
 #define SERVO_LABEL "servo"
 #define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
+#define TOF1_LABEL "tof1"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -113,6 +115,12 @@ extern "C"{
   #include <Arduino_APDS9960.h>
 #endif
 
+#ifdef TOF1
+  #include <Wire.h>
+  #include <VL53L1X.h>
+  VL53L1X sensor;
+#endif
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -163,6 +171,12 @@ extern "C"{
 #endif
 
 #ifdef GESTURE
+  // + black sleeve, - green
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
+#endif
+
+#ifdef TOF1
   // + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -237,6 +251,10 @@ PubSubClient client(espClient);
 #ifdef GESTURE
   const unsigned long sensorInterval = 1000;
   const String sensor_type = GESTURE_LABEL;
+#endif
+#ifdef TOF1
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = TOF1_LABEL;
 #endif
 
 
@@ -506,6 +524,31 @@ mDNSname = sensor_type + "-" + unit_id;
   }
 #endif
 
+#ifdef TOF1
+  Wire.begin(sda_pin, clk_pin);
+  Wire.setClock(400000); // use 400 kHz I2C
+
+  sensor.setTimeout(500);
+  if (!sensor.init())
+  {
+    Serial.println("Failed to detect and initialize TOF1!");
+    while (1);
+  }
+
+  // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
+  // You can change these settings to adjust the performance of the sensor, but
+  // the minimum timing budget is 20 ms for short distance mode and 33 ms for
+  // medium and long distance modes. See the VL53L1X datasheet for more
+  // information on range and timing limits.
+  sensor.setDistanceMode(VL53L1X::Long);
+  sensor.setMeasurementTimingBudget(50000);
+
+  // Start continuous readings at a rate of one measurement every 50 ms (the
+  // inter-measurement period). This period should be at least as long as the
+  // timing budget.
+  sensor.startContinuous(50);
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -755,6 +798,27 @@ if (WiFi.status() == WL_CONNECTED){
           digitalWrite(sonoff_led_blue, LOW);
         }
         else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef TOF1
+        StaticJsonDocument<128> doc;
+        doc["proximity"] = sensor.read();
+        if (sensor.timeoutOccurred()){
+          doc["timeout"] = true;
+        } else {
+          doc["timeout"] = false;
+        }
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+
       #endif
 
       previousSensorTime = millis();
