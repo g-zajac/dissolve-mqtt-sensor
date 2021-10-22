@@ -1,7 +1,7 @@
 #define VERSION "1.7.0"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define DUMMY            // no sensor connected, just sends random values
+#define DUMMY            // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
@@ -9,7 +9,7 @@
 // #define THERMAL_CAMERA
 // #define RGB
 // #define MIC
-#define SRF01
+// #define SRF01
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
@@ -343,20 +343,20 @@ String button_topic = "";
 // bool block_report = false;
 
 //--------------------------------- functions ----------------------------------
-
-void SRF01_Cmd(byte Address, byte cmd){               // Function to send commands to the SRF01
-  pinMode(SRF_TXRX, OUTPUT);
-  digitalWrite(SRF_TXRX, LOW);                        // Send a 2ms break to begin communications with the SRF01
-  delay(2);
-  digitalWrite(SRF_TXRX, HIGH);
-  delay(1);
-  srf01.write(Address);                               // Send the address of the SRF01
-  srf01.write(cmd);                                   // Send commnd byte to SRF01
-  pinMode(SRF_TXRX, INPUT);
-  int availbleJunk = srf01.available();               // As RX and TX are the same pin it will have recieved the data we just sent out, as we dont want this we read it back and ignore it as junk before waiting for useful data to arrive
-  for(int x = 0;  x < availbleJunk; x++) byte junk = srf01.read();
-}
-
+#ifdef SRF01
+  void SRF01_Cmd(byte Address, byte cmd){               // Function to send commands to the SRF01
+    pinMode(SRF_TXRX, OUTPUT);
+    digitalWrite(SRF_TXRX, LOW);                        // Send a 2ms break to begin communications with the SRF01
+    delay(2);
+    digitalWrite(SRF_TXRX, HIGH);
+    delay(1);
+    srf01.write(Address);                               // Send the address of the SRF01
+    srf01.write(cmd);                                   // Send commnd byte to SRF01
+    pinMode(SRF_TXRX, INPUT);
+    int availbleJunk = srf01.available();               // As RX and TX are the same pin it will have recieved the data we just sent out, as we dont want this we read it back and ignore it as junk before waiting for useful data to arrive
+    for(int x = 0;  x < availbleJunk; x++) byte junk = srf01.read();
+  }
+#endif
 
 int uptimeInSecs(){
   return (int)(millis()/1000);
@@ -909,15 +909,13 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef DUMMY
         StaticJsonDocument<256> doc;
-        doc["data"] = "dummy";
-        doc["relay"] = digitalRead(relay_pin);
-        doc["uptime"] = millis()/1000;
-        JsonArray data = doc.createNestedArray("data");
+        JsonArray data = doc.createNestedArray("value");
 
         for (int i = 0; i < 10; i++){
           data.add(random(0,100));
         }
-
+        doc["relay"] = digitalRead(relay_pin);
+        
         char out[128];
         serializeJson(doc, out);
 
