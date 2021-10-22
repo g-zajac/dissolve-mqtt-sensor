@@ -7,7 +7,8 @@
 // #define GESTURE
 // #define HUMIDITY
 // #define THERMAL_CAMERA
-#define RGB
+// #define RGB
+#define MIC
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
@@ -34,6 +35,8 @@
 #define TOF1_LABEL "proximity"
 #define HUMIDITY_LABEL "humidity"
 #define RGB_LABEL "light"
+#define MIC_LABEL "microphone"
+
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
 #define MQTT_ALIVE 60                                   // alive time in secs
@@ -105,7 +108,6 @@ extern "C"{
 
   /* Initialise with specific int time and gain values */
   // Adafruit_TCS34725 tcs = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_614MS, TCS34725_GAIN_1X);
-
 #endif
 
 // SOCKET does not have any sensor
@@ -149,9 +151,14 @@ extern "C"{
 #ifdef HUMIDITY
   #include <Wire.h>
   #include "ClosedCube_HDC1080.h"
-
   ClosedCube_HDC1080 hdc1080;
 #endif
+
+#ifdef MIC
+  #include <Adafruit_ADS1X15.h>
+  Adafruit_ADS1015 ads;     /* Use this for the 12-bit version */
+#endif
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #define sonoff_led_blue 13
 
@@ -191,7 +198,7 @@ extern "C"{
   // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT) || defined(RGB)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT) || defined(RGB) || defined(MIC)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -236,6 +243,11 @@ PubSubClient client(espClient);
 
 #ifdef RGB
   uint16_t r, g, b, c, colorTemp, lux;
+#endif
+
+#ifdef MIC
+  int16_t adc0;
+  float volts0;
 #endif
 
 //------------------------------------------------------------------------------
@@ -291,6 +303,10 @@ PubSubClient client(espClient);
 #ifdef RGB
   const unsigned long sensorInterval = 500;
   const String sensor_type = RGB_LABEL;
+#endif
+#ifdef MIC
+  const unsigned long sensorInterval = 300;
+  const String sensor_type = MIC_LABEL;
 #endif
 
 
@@ -636,6 +652,27 @@ mDNSname = unit_id;
   // delay(10000);
 #endif
 
+#ifdef MIC
+  Wire.begin(sda_pin, clk_pin);
+  // The ADC input range (or gain) can be changed via the following
+  // functions, but be careful never to exceed VDD +0.3V max, or to
+  // exceed the upper and lower limits if you adjust the input range!
+  // Setting these values incorrectly may destroy your ADC!
+  //                                                                ADS1015  ADS1115
+  //                                                                -------  -------
+  // ads.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default)
+  // ads.setGain(GAIN_ONE);        // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
+   ads.setGain(GAIN_TWO);        // 2x gain   +/- 2.048V  1 bit = 1mV      0.0625mV
+  // ads.setGain(GAIN_FOUR);       // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  // ads.setGain(GAIN_EIGHT);      // 8x gain   +/- 0.512V  1 bit = 0.25mV   0.015625mV
+  // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
+
+  if (!ads.begin()) {
+    debugln("Failed to initialize ADS.");
+  while (1);
+  }
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -948,6 +985,22 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef MIC
+        StaticJsonDocument<128> doc;
+        adc0 = ads.readADC_SingleEnded(0);
+        volts0 = ads.computeVolts(adc0);
+        doc["adc"] = adc0;
+        doc["volt"] = volts0;
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
+
       previousSensorTime = millis();
       // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
@@ -1000,6 +1053,8 @@ if (WiFi.status() == WL_CONNECTED){
             const char* sensor_type = TOF1_LABEL;
         #elif defined (RGB)
             const char* sensor_type = RGB_LABEL;
+        #elif defined (MIC)
+            const char* sensor_type = MIC_LABEL;
         #else
           const char* sensor_type = "not-defined";
         #endif

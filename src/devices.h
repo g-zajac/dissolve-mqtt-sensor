@@ -20,7 +20,7 @@ const device_details devices[] = {
   {0x00666608, "010"},  // Temperature & Humidity
   {0x0066460B, "011"},  // Thermal camera
   {0x00A8F31B, "012"},  // Light RGB
-  {0x00664624, "013"},  
+  {0x00664624, "013"},  // Mic
   {0x006648F0, "014"},
   {0x00A91667, "015"},
   {0x0065AFF1, "016"},
