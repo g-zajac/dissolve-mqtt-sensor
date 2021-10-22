@@ -12,7 +12,7 @@ const device_details devices[] = {
   {0x0065AFD6, "003"},  // proximity TOF0 - VL52L0X - 2m
   {0x0066455C, "004"},  // proximity TOF0 - VL52L0X - 2m
   {0x0066425C, "005"},  // gesture/proximity/colour
-  {0x0065C28B, "006"},
+  {0x0065C28B, "006"},  // proximity ultrasonic SRF01
   {0x0066465D, "007"},
   {0x00A97FCC, "008"},
   {0x0065EAC7, "009"},

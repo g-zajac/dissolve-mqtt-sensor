@@ -8,7 +8,8 @@
 // #define HUMIDITY
 // #define THERMAL_CAMERA
 // #define RGB
-#define MIC
+// #define MIC
+#define SRF01
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
@@ -36,6 +37,7 @@
 #define HUMIDITY_LABEL "humidity"
 #define RGB_LABEL "light"
 #define MIC_LABEL "microphone"
+#define SRF01_LABEL "proximity"
 
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC "resonance/socket/"
@@ -157,6 +159,17 @@ extern "C"{
 #ifdef MIC
   #include <Adafruit_ADS1X15.h>
   Adafruit_ADS1015 ads;     /* Use this for the 12-bit version */
+#endif
+
+#ifdef SRF01
+  #include <SoftwareSerial.h>
+  #define SRF_TXRX         4                                       // Defines pin to be used as RX and TX for SRF01
+  #define SRF_ADDRESS      0x01                                       // Address of the SFR01
+  #define GETSOFT          0x5D                                       // Byte to tell SRF01 we wish to read software version
+  #define GETRANGE         0x54                                       // Byte used to get range from SRF01
+  #define GETSTATUS        0x5F
+  SoftwareSerial srf01 = SoftwareSerial(SRF_TXRX, SRF_TXRX);      // Sets up software serial port for the SRF01
+
 #endif
 
 //--------------------------------- PIN CONFIG ---------------------------------
@@ -308,6 +321,10 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 300;
   const String sensor_type = MIC_LABEL;
 #endif
+#ifdef SRF01
+  const unsigned long sensorInterval = 400;
+  const String sensor_type = SRF01_LABEL;
+#endif
 
 
 // form mqtt topic based on template and id
@@ -326,6 +343,20 @@ String button_topic = "";
 // bool block_report = false;
 
 //--------------------------------- functions ----------------------------------
+
+void SRF01_Cmd(byte Address, byte cmd){               // Function to send commands to the SRF01
+  pinMode(SRF_TXRX, OUTPUT);
+  digitalWrite(SRF_TXRX, LOW);                        // Send a 2ms break to begin communications with the SRF01
+  delay(2);
+  digitalWrite(SRF_TXRX, HIGH);
+  delay(1);
+  srf01.write(Address);                               // Send the address of the SRF01
+  srf01.write(cmd);                                   // Send commnd byte to SRF01
+  pinMode(SRF_TXRX, INPUT);
+  int availbleJunk = srf01.available();               // As RX and TX are the same pin it will have recieved the data we just sent out, as we dont want this we read it back and ignore it as junk before waiting for useful data to arrive
+  for(int x = 0;  x < availbleJunk; x++) byte junk = srf01.read();
+}
+
 
 int uptimeInSecs(){
   return (int)(millis()/1000);
@@ -673,6 +704,20 @@ mDNSname = unit_id;
   }
 #endif
 
+#ifdef SRF01
+  srf01.begin(9600);
+  srf01.listen();                                         // Make sure that the SRF01 software serial port is listening for data as only one software serial port can listen at a time
+  delay(200);
+
+  byte softVer;
+  SRF01_Cmd(SRF_ADDRESS, GETSOFT);                        // Request the SRF01 software version
+  while (srf01.available() < 1);
+    softVer = srf01.read();
+
+    debug("V"); debugln(softVer);
+#endif
+
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -1000,6 +1045,37 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef SRF01
+        byte hByte, lByte, statusByte, b1, b2, b3;
+
+        SRF01_Cmd(SRF_ADDRESS, GETRANGE);                       // Get the SRF01 to perform a ranging and send the data back to the arduino
+        while (srf01.available() < 2);
+        hByte = srf01.read();                                   // Get high byte
+        lByte = srf01.read();                                   // Get low byte
+        int range = ((hByte<<8)+lByte);                         // Put them together
+
+        SRF01_Cmd(SRF_ADDRESS, GETSTATUS);                      // Request byte that will tell us if the transducer is locked or unlocked
+        while (srf01.available() < 1);
+          statusByte = srf01.read();                            // Reads the SRF01 status, The least significant bit tells us if it is locked or unlocked
+        int newStatus = statusByte & 0x01;                      // Get status of lease significan bit
+        if(newStatus == 0){
+          debugln("Unlocked");                              // Prints the word unlocked followd by a couple of spaces to make sure space after has nothing in
+        }
+         else {
+          debugln("Locked   ");                             // Prints the word locked followd by a couple of spaces to make sure that the space after has nothing in
+        }
+
+        StaticJsonDocument<128> doc;
+        doc["value"] = range;
+
+        char out[128];
+        serializeJson(doc, out);
+
+        boolean rc = client.publish(data_topic_char, out);
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
 
       previousSensorTime = millis();
       // block_report = false;
@@ -1054,6 +1130,8 @@ if (WiFi.status() == WL_CONNECTED){
         #elif defined (RGB)
             const char* sensor_type = RGB_LABEL;
         #elif defined (MIC)
+            const char* sensor_type = MIC_LABEL;
+        #elif defined (SRF01)
             const char* sensor_type = MIC_LABEL;
         #else
           const char* sensor_type = "not-defined";
