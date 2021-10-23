@@ -1,7 +1,7 @@
 #define VERSION "1.7.1"
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY            // no sensor connected, just send random values
+// #define DUMMY            // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
@@ -16,6 +16,7 @@
 
 // #define SOCKET
 // #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
+#define SERVO2
 // #define STEPPER
 
 
@@ -30,6 +31,7 @@
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
 #define SERVO_LABEL "servo"
+#define SERVO2_LABEL "sand"
 #define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
 #define TOF0_LABEL "proximity"
@@ -127,6 +129,11 @@ extern "C"{
   uint8_t servonum = 0;
 #endif
 
+#ifdef SERVO2
+  #define SERVO2_PIN 2
+  #include <Servo.h>
+#endif
+
 #ifdef STEPPER
   #include <AccelStepper.h>
 
@@ -200,8 +207,8 @@ extern "C"{
   #define relay_pin 12 //TH relay with red LED
 #endif
 
-#ifdef SERVO
-  //
+#ifdef SERVO2
+  Servo myservo;
 #endif
 
 #ifdef STEPPER
@@ -250,6 +257,10 @@ PubSubClient client(espClient);
   int pos = 500;
 #endif
 
+#ifdef SERVO2
+  int pos = 0; // variable to store the servo position
+#endif
+
 #ifdef GESTURE
   int proximity = 0;
   int r = 0, g = 0, b = 0;
@@ -294,6 +305,10 @@ PubSubClient client(espClient);
 #ifdef SERVO
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SERVO_LABEL;
+#endif
+#ifdef SERVO2
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = SERVO2_LABEL;
 #endif
 #ifdef STEPPER
   const unsigned long sensorInterval = 1000;
@@ -609,6 +624,15 @@ mDNSname = unit_id;
   pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~60 Hz updates
   delay(100);
   pwm.setPWM(servonum, 0, SERVOMIN); // set home
+#endif
+
+#ifdef SERVO2
+  myservo.attach(SERVO2_PIN);
+  pos = 0;
+  myservo.write(pos);
+  delay(1000);
+  pos = 100;
+  myservo.write(pos);
 #endif
 
 #ifdef STEPPER
@@ -986,6 +1010,25 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef SERVO2
+        boolean rc;
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["valve position"] = myservo.read();
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
       #ifdef STEPPER
         StaticJsonDocument<128> doc;
         doc["stepper set position"] = pos;
@@ -1167,6 +1210,8 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = SOCKET_LABEL;
         #elif defined (SERVO)
           const char* sensor_type = SERVO_LABEL;
+        #elif defined (SERVO2)
+          const char* sensor_type = SERVO2_LABEL;
         #elif defined (STEPPER)
           const char* sensor_type = STEPPER_LABEL;
         #elif defined (GESTURE)
