@@ -1,4 +1,4 @@
-#define VERSION "1.7.0"
+#define VERSION "1.7.1"
 
 //------------------------------ SELECT SENSOR ---------------------------------
 #define DUMMY            // no sensor connected, just send random values
@@ -223,6 +223,8 @@ extern "C"{
 #endif
 
 //------------------------------- VARs declarations ----------------------------
+bool error_flag = false;
+
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
   const unsigned long reportInterval = REPORT_RATE;
@@ -335,6 +337,7 @@ PubSubClient client(espClient);
 #endif
 
 String topic = "";
+String error_topic = "";
 String subscribe_topic_relay = "";
 String subscribe_topic_stepper = "";
 String mDNSname = "";
@@ -520,13 +523,14 @@ if (device->esp_chip_id == 0) {
     #ifdef SERIAL_DEBUG
       Serial.printf("This ESP8266 Chip id = 0x%08X\n", chip_id);
     #endif
-    String unit_id = "99";
+    String unit_id = "099";
 }
 
 String unit_id = device->id;
 debug("Device ID: "); debugln(unit_id);
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
+error_topic = topicPrefix + "/error";
 subscribe_topic_relay = topic + "/relay";
 #ifdef STEPPER
   subscribe_topic_stepper = topic + "/set";
@@ -558,10 +562,13 @@ mDNSname = unit_id;
   if (!gyro.init())
   {
     debugln("Failed to autodetect gyro type!");
-    while (1);
+    error_flag = TRUE;
+  } else {
+    gyro.enableDefault();
+    debugln("gyro connected");
+    error_flag = false;
   }
-  gyro.enableDefault();
-  debugln("gyro connected");
+
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -571,8 +578,8 @@ mDNSname = unit_id;
   status = amg.begin();
   if (!status) {
       debugln("Could not find a valid AMG88xx sensor, check wiring!");
-      while (1);
-  }
+      error_flag = TRUE;
+  } else error_flag = false;
 #endif
 
 #ifdef RGB
@@ -580,9 +587,10 @@ mDNSname = unit_id;
   delay(20);
   if (tcs.begin()) {
     debugln("Found sensor");
+    error_flag = TRUE;
   } else {
     debugln("No TCS34725 found ... check your connections");
-  while (1);
+    error_flag = false;
   }
 #endif
 
@@ -613,9 +621,10 @@ mDNSname = unit_id;
 #ifdef GESTURE
   Wire.begin(sda_pin, clk_pin);
   if (!APDS.begin()) {
-  Serial.println("Error initializing APDS-9960 sensor.");
-  while (true); // Stop forever
-  }
+    debuglnln("Error initializing APDS-9960 sensor.");
+    error_flag = TRUE;
+  } else error_flag = false;
+
 #endif
 
 #ifdef TOF0
@@ -624,14 +633,15 @@ mDNSname = unit_id;
   if (!sensor.init())
   {
     Serial.println("Failed to detect and initialize sensor!");
-    while (1) {}
-  }
+    error_flag = TRUE;
 
-  // Start continuous back-to-back mode (take readings as
-  // fast as possible).  To use continuous timed mode
-  // instead, provide a desired inter-measurement period in
-  // ms (e.g. sensor.startContinuous(100)).
-  sensor.startContinuous(50);
+    // Start continuous back-to-back mode (take readings as
+    // fast as possible).  To use continuous timed mode
+    // instead, provide a desired inter-measurement period in
+    // ms (e.g. sensor.startContinuous(100)).
+    sensor.startContinuous(50);
+
+  } else error_flag = false;
 #endif
 
 #ifdef TOF1
@@ -642,21 +652,22 @@ mDNSname = unit_id;
   if (!sensor.init())
   {
     Serial.println("Failed to detect and initialize TOF1!");
-    while (1);
+    error_flag = TRUE;
+  } else {
+    // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
+    // You can change these settings to adjust the performance of the sensor, but
+    // the minimum timing budget is 20 ms for short distance mode and 33 ms for
+    // medium and long distance modes. See the VL53L1X datasheet for more
+    // information on range and timing limits.
+    sensor.setDistanceMode(VL53L1X::Long);
+    sensor.setMeasurementTimingBudget(50000);
+
+    // Start continuous readings at a rate of one measurement every 50 ms (the
+    // inter-measurement period). This period should be at least as long as the
+    // timing budget.
+    sensor.startContinuous(50);
+    error_flag = false;
   }
-
-  // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
-  // You can change these settings to adjust the performance of the sensor, but
-  // the minimum timing budget is 20 ms for short distance mode and 33 ms for
-  // medium and long distance modes. See the VL53L1X datasheet for more
-  // information on range and timing limits.
-  sensor.setDistanceMode(VL53L1X::Long);
-  sensor.setMeasurementTimingBudget(50000);
-
-  // Start continuous readings at a rate of one measurement every 50 ms (the
-  // inter-measurement period). This period should be at least as long as the
-  // timing budget.
-  sensor.startContinuous(50);
 #endif
 
 #ifdef HUMIDITY
@@ -700,8 +711,8 @@ mDNSname = unit_id;
 
   if (!ads.begin()) {
     debugln("Failed to initialize ADS.");
-  while (1);
-  }
+    error_flag = TRUE;
+  } else error_flag = false;
 #endif
 
 #ifdef SRF01
@@ -713,7 +724,6 @@ mDNSname = unit_id;
   SRF01_Cmd(SRF_ADDRESS, GETSOFT);                        // Request the SRF01 software version
   while (srf01.available() < 1);
     softVer = srf01.read();
-
     debug("V"); debugln(softVer);
 #endif
 
@@ -782,11 +792,11 @@ if (WiFi.status() == WL_CONNECTED){
   #endif
 
   #ifdef WEIGHT
-    LoadCell.update();
+    if (!error_flag) LoadCell.update();
   #endif
 
   #ifdef GYRO
-    gyro.read();
+    if (!error_flag) gyro.read();
   #endif
 
   #ifdef STEPPER
@@ -794,20 +804,22 @@ if (WiFi.status() == WL_CONNECTED){
   #endif
 
   #ifdef GESTURE
-  // Check if a proximity reading is available.
-    if (APDS.proximityAvailable()) {
-    proximity = APDS.readProximity();
-    }
+  if (!error_flag) {
+    // Check if a proximity reading is available.
+      if (APDS.proximityAvailable()) {
+      proximity = APDS.readProximity();
+      }
 
-    // Check if a gesture reading is available
-    if (APDS.gestureAvailable()) {
-    gesture = APDS.readGesture();
-    }
+      // Check if a gesture reading is available
+      if (APDS.gestureAvailable()) {
+      gesture = APDS.readGesture();
+      }
 
-    // Check if a color reading is available
-    if (APDS.colorAvailable()) {
-    APDS.readColor(r, g, b);
-    }
+      // Check if a color reading is available
+      if (APDS.colorAvailable()) {
+      APDS.readColor(r, g, b);
+      }
+  }
   #endif
 
 
@@ -816,8 +828,10 @@ if (WiFi.status() == WL_CONNECTED){
       // block_report = true;
       digitalWrite(sonoff_led_blue, LOW);
 
+      // TODO move out of the loop, generate once only?
       String data_topic = topic + "/data";
       const char * data_topic_char = data_topic.c_str();
+      const char * error_topic_char = error_topic.c_str();
 
       #ifdef SOCKET
         StaticJsonDocument<128> doc;
@@ -825,16 +839,21 @@ if (WiFi.status() == WL_CONNECTED){
 
         char out[128];
         serializeJson(doc, out);
-
-        boolean rc = client.publish(data_topic_char, out);
+        if (!error_flag) {
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
+        }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
       #endif
 
       #ifdef WEIGHT
-        float data = LoadCell.getData();
-        debug("Weight: ");
-        debugln(data);
+        if (!error_flag){
+          float data = LoadCell.getData();
+          debug("Weight: ");
+          debugln(data);
+        }
       #endif
 
       #ifdef PROXIMITY
@@ -844,44 +863,53 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef GYRO
-        debug("G ");
-        debug("X: ");
-        debug((int)gyro.g.x);
-        debug(" Y: ");
-        debug((int)gyro.g.y);
-        debug(" Z: ");
-        debugln((int)gyro.g.z);
+        if (!error_flag){
+          debug("G ");
+          debug("X: ");
+          debug((int)gyro.g.x);
+          debug(" Y: ");
+          debug((int)gyro.g.y);
+          debug(" Z: ");
+          debugln((int)gyro.g.z);
 
-        int dataX = (int)gyro.g.x;
-        int dataY = (int)gyro.g.y;
-        int dataZ = (int)gyro.g.z;
+          int dataX = (int)gyro.g.x;
+          int dataY = (int)gyro.g.y;
+          int dataZ = (int)gyro.g.z;
 
+        //TODO make JSON
         String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
         client.publish(data_topic_char, gyro_data.c_str());
+      } else {
+        client.publish(error_topic, gyro_data.c_str());
+      }
       #endif
 
       #ifdef THERMAL_CAMERA
+        if(!error_flag){
+
+
         StaticJsonDocument<1024> doc;
         JsonArray data = doc.createNestedArray("value");
-        amg.readPixels(pixels);
+          amg.readPixels(pixels);
+          for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
+            data.add(pixels[i-1]);
+          }
 
-        for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
-          data.add(pixels[i-1]);
+          char out[1024];
+          serializeJson(doc, out);
+          // debug("size of json char: "); debugln(sizeof(doc));
+          // debug("mqtt message size: "); debugln(strlen(out));
+          debugln("");
+          debugln("data: ");
+          debugln(out);
+          debugln("");
+
+          client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
+          // debug("mqtt buffer size: "); debugln(client.getBufferSize());
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
         }
-        // debug("size of json image: "); debugln(sizeof(doc));
-        char out[1024];
-        serializeJson(doc, out);
-        // debug("size of json char: "); debugln(sizeof(doc));
-        // debug("mqtt message size: "); debugln(strlen(out));
-        debugln("");
-        debugln("data: ");
-        debugln(out);
-        debugln("");
-
-        client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
-        // debug("mqtt buffer size: "); debugln(client.getBufferSize());
-
-        boolean rc = client.publish(data_topic_char, out);
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
@@ -890,8 +918,9 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef RGB
-        tcs.getRawData(&r, &g, &b, &c);
-        // colorTemp = tcs.calculateColorTemperature(r, g, b);
+        if (!error_flag){
+          tcs.getRawData(&r, &g, &b, &c);
+          // colorTemp = tcs.calculateColorTemperature(r, g, b);
 
         StaticJsonDocument<128> doc;
         doc["colortemp"] = tcs.calculateColorTemperature_dn40(r, g, b, c);
@@ -903,6 +932,9 @@ if (WiFi.status() == WL_CONNECTED){
         serializeJson(doc, out);
 
         boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
+        }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
       #endif
@@ -915,7 +947,7 @@ if (WiFi.status() == WL_CONNECTED){
           data.add(random(0,100));
         }
         doc["relay"] = digitalRead(relay_pin);
-        
+
         char out[128];
         serializeJson(doc, out);
 
@@ -934,6 +966,7 @@ if (WiFi.status() == WL_CONNECTED){
         char data_char[8];
         itoa(data, data_char, 10);
         client.publish(data_topic_char, data_char);
+        //TODO make json + error handling
       #endif
 
       #ifdef SERVO
@@ -968,16 +1001,20 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef GESTURE
-        StaticJsonDocument<128> doc;
-        doc["proximity"] = proximity;
-        doc["gesture"] = gesture;
-        JsonArray data = doc.createNestedArray("colour");
-        data.add(r); data.add(g); data.add(b);
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["proximity"] = proximity;
+          doc["gesture"] = gesture;
+          JsonArray data = doc.createNestedArray("colour");
+          data.add(r); data.add(g); data.add(b);
 
-        char out[128];
-        serializeJson(doc, out);
+          char out[128];
+          serializeJson(doc, out);
 
-        boolean rc = client.publish(data_topic_char, out);
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
+        }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
@@ -986,23 +1023,26 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #if defined(TOF0) || defined(TOF1)
-        StaticJsonDocument<128> doc;
-        #ifdef TOF0
-          doc["value"] = sensor.readRangeSingleMillimeters();
-        #endif
-        #ifdef TOF1
-          doc["value"] = sensor.read();
-        #endif
-        if (sensor.timeoutOccurred()){
-          doc["timeout"] = true;
-        } else {
-          doc["timeout"] = false;
-        }
+        if (!error_flag){
+          StaticJsonDocument<128> doc;
+          #ifdef TOF0
+            doc["value"] = sensor.readRangeSingleMillimeters();
+          #endif
+          #ifdef TOF1
+            doc["value"] = sensor.read();
+          #endif
+          if (sensor.timeoutOccurred()){
+            doc["timeout"] = true;
+          } else {
+            doc["timeout"] = false;
+          }
 
         char out[128];
         serializeJson(doc, out);
-
         boolean rc = client.publish(data_topic_char, out);
+      } else {
+        boolean rc = client.publish(error_topic_char, "sensor not found");
+      }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
@@ -1011,16 +1051,20 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef HUMIDITY
-        StaticJsonDocument<128> doc;
-        delay(20);
-        doc["humidity"] = hdc1080.readHumidity();
-        delay(20);
-        doc["temeperature"] = hdc1080.readTemperature();
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          delay(20);
+          doc["humidity"] = hdc1080.readHumidity();
+          delay(20);
+          doc["temeperature"] = hdc1080.readTemperature();
 
-        char out[128];
-        serializeJson(doc, out);
+          char out[128];
+          serializeJson(doc, out);
 
-        boolean rc = client.publish(data_topic_char, out);
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
+        }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
@@ -1029,47 +1073,55 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef MIC
-        StaticJsonDocument<128> doc;
-        adc0 = ads.readADC_SingleEnded(0);
-        volts0 = ads.computeVolts(adc0);
-        doc["adc"] = adc0;
-        doc["volt"] = volts0;
+        if (!error_flag){
+          StaticJsonDocument<128> doc;
+          adc0 = ads.readADC_SingleEnded(0);
+          volts0 = ads.computeVolts(adc0);
+          doc["adc"] = adc0;
+          doc["volt"] = volts0;
 
-        char out[128];
-        serializeJson(doc, out);
+          char out[128];
+          serializeJson(doc, out);
 
-        boolean rc = client.publish(data_topic_char, out);
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
+        }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
       #endif
 
       #ifdef SRF01
-        byte hByte, lByte, statusByte, b1, b2, b3;
+        if(!error_flag){
+          byte hByte, lByte, statusByte, b1, b2, b3;
 
-        SRF01_Cmd(SRF_ADDRESS, GETRANGE);                       // Get the SRF01 to perform a ranging and send the data back to the arduino
-        while (srf01.available() < 2);
-        hByte = srf01.read();                                   // Get high byte
-        lByte = srf01.read();                                   // Get low byte
-        int range = ((hByte<<8)+lByte);                         // Put them together
+          SRF01_Cmd(SRF_ADDRESS, GETRANGE);                       // Get the SRF01 to perform a ranging and send the data back to the arduino
+          while (srf01.available() < 2);
+          hByte = srf01.read();                                   // Get high byte
+          lByte = srf01.read();                                   // Get low byte
+          int range = ((hByte<<8)+lByte);                         // Put them together
 
-        SRF01_Cmd(SRF_ADDRESS, GETSTATUS);                      // Request byte that will tell us if the transducer is locked or unlocked
-        while (srf01.available() < 1);
-          statusByte = srf01.read();                            // Reads the SRF01 status, The least significant bit tells us if it is locked or unlocked
-        int newStatus = statusByte & 0x01;                      // Get status of lease significan bit
-        if(newStatus == 0){
-          debugln("Unlocked");                              // Prints the word unlocked followd by a couple of spaces to make sure space after has nothing in
+          SRF01_Cmd(SRF_ADDRESS, GETSTATUS);                      // Request byte that will tell us if the transducer is locked or unlocked
+          while (srf01.available() < 1);
+            statusByte = srf01.read();                            // Reads the SRF01 status, The least significant bit tells us if it is locked or unlocked
+          int newStatus = statusByte & 0x01;                      // Get status of lease significan bit
+          if(newStatus == 0){
+            debugln("Unlocked");                              // Prints the word unlocked followd by a couple of spaces to make sure space after has nothing in
+          }
+           else {
+            debugln("Locked   ");                             // Prints the word locked followd by a couple of spaces to make sure that the space after has nothing in
+          }
+
+          StaticJsonDocument<128> doc;
+          doc["value"] = range;
+
+          char out[128];
+          serializeJson(doc, out);
+
+          boolean rc = client.publish(data_topic_char, out);
+        } else {
+          boolean rc = client.publish(error_topic_char, "sensor not found");
         }
-         else {
-          debugln("Locked   ");                             // Prints the word locked followd by a couple of spaces to make sure that the space after has nothing in
-        }
-
-        StaticJsonDocument<128> doc;
-        doc["value"] = range;
-
-        char out[128];
-        serializeJson(doc, out);
-
-        boolean rc = client.publish(data_topic_char, out);
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
       #endif
