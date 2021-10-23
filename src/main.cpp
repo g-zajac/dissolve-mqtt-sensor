@@ -15,8 +15,7 @@
 // #define GYRO
 
 // #define SOCKET
-// #define SERVO // NOTE obsolete, backup only, remove after checking the pinch valve
-#define SERVO2
+#define SERVO
 // #define STEPPER
 
 
@@ -30,7 +29,6 @@
 #define GYRO_LABEL "gyro"
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
-#define SERVO_LABEL "servo"
 #define SERVO2_LABEL "sand"
 #define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
@@ -117,20 +115,7 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #ifdef SERVO
-  #include <Adafruit_PWMServoDriver.h>
-  Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
-
-  #define SERVOMIN  150 // This is the 'minimum' pulse length count (out of 4096)
-  #define SERVOMAX  600 // This is the 'maximum' pulse length count (out of 4096)
-  #define SERVO_FREQ 50 // Analog servos run at ~50 Hz updates
-
-  int servo_position = 0; // home valve closed? in degrees
-  // our servo # number
-  uint8_t servonum = 0;
-#endif
-
-#ifdef SERVO2
-  #define SERVO2_PIN 2
+  #define SERVO2_PIN 14
   #include <Servo.h>
 #endif
 
@@ -207,7 +192,7 @@ extern "C"{
   #define relay_pin 12 //TH relay with red LED
 #endif
 
-#ifdef SERVO2
+#ifdef SERVO
   Servo myservo;
 #endif
 
@@ -257,7 +242,8 @@ PubSubClient client(espClient);
   int pos = 500;
 #endif
 
-#ifdef SERVO2
+#ifdef SERVO
+  #define sonoff_led_blue 2 // build in LED on chip 
   int pos = 0; // variable to store the servo position
 #endif
 
@@ -303,10 +289,6 @@ PubSubClient client(espClient);
   const String sensor_type = SOCKET_LABEL;
 #endif
 #ifdef SERVO
-  const unsigned long sensorInterval = 1000;
-  const String sensor_type = SERVO_LABEL;
-#endif
-#ifdef SERVO2
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SERVO2_LABEL;
 #endif
@@ -620,13 +602,6 @@ mDNSname = unit_id;
 #endif
 
 #ifdef SERVO
-  pwm.begin();
-  pwm.setPWMFreq(SERVO_FREQ);  // Analog servos run at ~60 Hz updates
-  delay(100);
-  pwm.setPWM(servonum, 0, SERVOMIN); // set home
-#endif
-
-#ifdef SERVO2
   myservo.attach(SERVO2_PIN);
   pos = 0;
   myservo.write(pos);
@@ -994,23 +969,6 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef SERVO
-        servo_position = 90;
-        int pulselength = map(servo_position, 0, 180, SERVOMIN, SERVOMAX);
-        pwm.setPWM(servonum, 0, pulselength);
-
-        StaticJsonDocument<128> doc;
-        doc["valve position"] = servo_position;
-        char out[128];
-        serializeJson(doc, out);
-        boolean rc = client.publish(data_topic_char, out);
-        if (!rc) {
-          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
-          digitalWrite(sonoff_led_blue, LOW);
-        }
-        else debugln("MQTT data send successfully");
-      #endif
-
-      #ifdef SERVO2
         boolean rc;
         if(!error_flag){
           StaticJsonDocument<128> doc;
@@ -1209,8 +1167,6 @@ if (WiFi.status() == WL_CONNECTED){
         #elif defined (SOCKET)
           const char* sensor_type = SOCKET_LABEL;
         #elif defined (SERVO)
-          const char* sensor_type = SERVO_LABEL;
-        #elif defined (SERVO2)
           const char* sensor_type = SERVO2_LABEL;
         #elif defined (STEPPER)
           const char* sensor_type = STEPPER_LABEL;
