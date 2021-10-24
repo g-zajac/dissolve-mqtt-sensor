@@ -3,7 +3,7 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY            // no sensor connected, just send random values
+// #define DUMMY            // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
@@ -17,7 +17,7 @@
 // #define GYRO
 
 // #define SOCKET
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //TODO add report info about sub category sensor type i.e TOF1 etc
 
@@ -618,9 +618,10 @@ mDNSname = unit_id;
 #endif
 
 #ifdef SERVO
-  // NOTE keep oryginal position without change on start
   myservo.attach(SERVO_PIN);
-  pos = myservo.read();
+  delay(20);
+  myservo.write(180);             // close by default
+  // pos = myservo.read();
   debug("servo @ position: "); debugln(pos);
 #endif
 
