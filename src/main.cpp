@@ -444,29 +444,27 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     if (String(topic) == subscribe_topic_servo.c_str()){
       int payload_value = atoi((char*)payload);
-      debug("received position message "); debugln(payload_value);
+      debug("received message position: "); debugln(payload_value);
+      int new_pos = map(payload_value, 0, 100, 0, 180);
+      debug("new position in deg: "); debugln(new_pos);
       prev_pos = myservo.read();
-      debug("previous position "); debugln(prev_pos);
-      if (payload_value < 0) {
+      debug("previous position in deg: "); debugln(prev_pos);
+      if (new_pos < 0) {
         pos = 0;
-        //TODO update limits to valve!!!
-        //TODO add map 0-100 open/close scaling, after calibrating, #define max and min
-      } else if (payload_value >= 0 && payload_value < 199){
-        pos = payload_value;
-      } else if (payload_value > 199) {pos = 199;}
+      } else if (new_pos >= 0 && new_pos <= 180){
+        pos = new_pos;
+      } else if (new_pos > 180) {pos = 180;}
       else {debug("received wrong format servo position: "); debugln(payload_value);}
     }
 
     debug("moving servo to: "); debugln(pos);
     if (pos > prev_pos){
       for (int p = prev_pos; p <= pos; p+=1 ){
-      debug(p);
       myservo.write(p);
       delay(SERVO_SPEED);
       }
     } else if (pos < prev_pos){
       for (int p = prev_pos; p >= pos; p-=1 ){
-      debug(p);
       myservo.write(p);
       delay(SERVO_SPEED);
       }
@@ -995,7 +993,7 @@ if (WiFi.status() == WL_CONNECTED){
       #ifdef SERVO
         if(!error_flag){
           StaticJsonDocument<128> doc;
-          doc["valve position"] = myservo.read();
+          doc["valve position"] = map(myservo.read(), 0, 180, 0, 100);
           char out[128];
           serializeJson(doc, out);
 
