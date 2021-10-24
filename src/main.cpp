@@ -12,12 +12,11 @@
 // #define RGB
 // #define MIC
 // #define SRF01 // connection detection does not work
-// #define PROXIMITY
+#define PROXIMITY // double eye sensor
 // #define WEIGHT
 // #define GYRO
-
 // #define SOCKET
-#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //TODO add report info about sub category sensor type i.e TOF1 etc
 
@@ -472,8 +471,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
       debugln("position the same, do nothing");
     }
     debugln("moving servo completed");
-
-
   #endif
 
   debugln("- - - - - - - - - - - - -");
@@ -486,9 +483,9 @@ void setup() {
 pinMode(sonoff_led_blue, OUTPUT);
 digitalWrite(sonoff_led_blue, HIGH);  // default off
 
-Serial.begin(115200);
 #if SERIAL_DEBUG == 1
-  delay(3000);
+  Serial.begin(115200);
+  // delay(3000);  // for debuging only
 #endif
 
 debugln("\r\n---------------------------------------");        // compiling info
@@ -511,7 +508,7 @@ debug("MAC: "); debugln(WiFi.macAddress());
 debug("Reset reason: "); debugln(ESP.getResetReason());
 debugln();
 
-// determine unit ID based on devices.h definitions
+// -------------  determine unit ID based on devices.h definitions -------------
 int chip_id = ESP.getChipId();
 const device_details *device = devices;
 for (; device->esp_chip_id != 0; device++) {
@@ -529,6 +526,8 @@ if (device->esp_chip_id == 0) {
 
 String unit_id = device->id;
 debug("Device ID: "); debugln(unit_id);
+
+//--------------------------- from MQTT topics ---------------------------------
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
 error_topic = topic + "/error";
@@ -567,7 +566,6 @@ mDNSname = unit_id;
 #endif
 
 #ifdef GYRO
-  // Wire.begin(sda_pin, clk_pin);
   Wire.begin(sda_pin, clk_pin);
   if (!gyro.init())
   {
@@ -578,7 +576,6 @@ mDNSname = unit_id;
     debugln("gyro connected");
     error_flag = false;
   }
-
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -593,8 +590,8 @@ mDNSname = unit_id;
 #endif
 
 #ifdef RGB
-  // Wire.begin(sda_pin, clk_pin);
-  Wire.begin(4, 14);
+  debug("SDA pin: "); debug(sda_pin); debug(" CLK pin: "); debugln(clk_pin);
+  Wire.begin(sda_pin, clk_pin);
   delay(20);
   if (tcs.begin()) {
     debugln("Found sensor");
@@ -605,7 +602,7 @@ mDNSname = unit_id;
   }
 #endif
 
-#ifdef SOCKET
+#ifdef SOCKET                    // for sonoff sockets, in case they have relay on different pin
   pinMode(relay_pin, OUTPUT);
   digitalWrite(relay_pin, LOW); // default off
 #endif
@@ -619,7 +616,6 @@ mDNSname = unit_id;
   myservo.attach(SERVO_PIN);
   delay(20);
   myservo.write(180);             // close by default
-  // pos = myservo.read();
   debug("servo @ position: "); debugln(pos);
 #endif
 
@@ -629,7 +625,6 @@ mDNSname = unit_id;
     debugln("Error initializing APDS-9960 sensor.");
     error_flag = true;
   } else error_flag = false;
-
 #endif
 
 #ifdef TOF0
@@ -645,7 +640,6 @@ mDNSname = unit_id;
     // instead, provide a desired inter-measurement period in
     // ms (e.g. sensor.startContinuous(100)).
     sensor.startContinuous(50);
-
   } else error_flag = false;
 #endif
 
@@ -792,6 +786,7 @@ if (WiFi.status() == WL_CONNECTED){
       client.loop();
   } //end of mqtt connection reconnecting
 
+  // once connected to wifi and mqtt do:
   #ifdef BUTTON
     bb.update(); // Update the Bounce instance
     if ( bb.fell() ) {  // Call code if button transitions from HIGH to LOW
@@ -880,9 +875,28 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef PROXIMITY
-        float data = measure_distance();
-        debug("Distance: ");
-        debugln(data);
+        if (!error_flag) {
+          float data = measure_distance();
+          debug("Distance: "); debugln(data);
+
+          StaticJsonDocument<128> doc;
+          doc["value"] = data;
+          doc["relay"] = digitalRead(relay_pin);
+          char out[128];
+          serializeJson(doc, out);
+
+          debug("JSON Test value: ");
+          debugln(out);
+
+          rc = client.publish(data_topic_char, out);
+          } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+          }
+          if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+          } else debugln("MQTT data send successfully");
       #endif
 
       #ifdef GYRO
@@ -902,9 +916,7 @@ if (WiFi.status() == WL_CONNECTED){
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
-        }
-        else debugln("MQTT data send successfully");
-
+        } else debugln("MQTT data send successfully");
       #endif
 
       #ifdef THERMAL_CAMERA
@@ -934,8 +946,7 @@ if (WiFi.status() == WL_CONNECTED){
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
-        }
-        else debugln("MQTT data send successfully");
+        } else debugln("MQTT data send successfully");
       #endif
 
       #ifdef RGB
@@ -954,9 +965,13 @@ if (WiFi.status() == WL_CONNECTED){
 
         rc = client.publish(data_topic_char, out);
         } else {
-          rc = client.publish(error_topic_char, "sensor not found");
+        rc = client.publish(error_topic_char, "sensor not found");
+        debug("MQTT error message sent on topic: "); debugln(error_topic_char);
         }
-        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        if (!rc) {
+        debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+        digitalWrite(sonoff_led_blue, LOW);
+        }
         else debugln("MQTT data send successfully");
       #endif
 
@@ -981,13 +996,6 @@ if (WiFi.status() == WL_CONNECTED){
           digitalWrite(sonoff_led_blue, LOW);
         }
         else debugln("MQTT data send successfully");
-      #endif
-
-      #if defined(PROXIMITY)
-        char data_char[8];
-        itoa(data, data_char, 10);
-        client.publish(data_topic_char, data_char);
-        //TODO make json + error handling
       #endif
 
       #ifdef SERVO
