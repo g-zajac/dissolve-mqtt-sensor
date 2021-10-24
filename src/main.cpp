@@ -15,9 +15,8 @@
 // #define GYRO
 
 // #define SOCKET
-#define SERVO
+#define SERVO   // CHANGE PLATFORM, NOT SONOFF!!!
 // #define STEPPER
-
 
 
 //------------------------------------------------------------------------------
@@ -243,7 +242,7 @@ PubSubClient client(espClient);
 #endif
 
 #ifdef SERVO
-  #define sonoff_led_blue 2 // build in LED on chip 
+  #define sonoff_led_blue 2 // build in LED on chip
   int pos = 0; // variable to store the servo position
 #endif
 
