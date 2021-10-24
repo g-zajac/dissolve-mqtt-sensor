@@ -6,7 +6,7 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 // #define RGB
 // #define MIC
 // #define SRF01
@@ -15,7 +15,7 @@
 // #define GYRO
 
 // #define SOCKET
-#define SERVO   // CHANGE PLATFORM, NOT SONOFF!!!
+// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!! 
 
 
 
@@ -529,7 +529,7 @@ String unit_id = device->id;
 debug("Device ID: "); debugln(unit_id);
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
-error_topic = topicPrefix + "/error";
+error_topic = topic + "/error";
 subscribe_topic_relay = topic + "/relay";
 #ifdef SERVO
   subscribe_topic_servo = topic + "/set";
@@ -561,7 +561,7 @@ mDNSname = unit_id;
   if (!gyro.init())
   {
     debugln("Failed to autodetect gyro type!");
-    error_flag = TRUE;
+    error_flag = true;
   } else {
     gyro.enableDefault();
     debugln("gyro connected");
@@ -577,7 +577,7 @@ mDNSname = unit_id;
   status = amg.begin();
   if (!status) {
       debugln("Could not find a valid AMG88xx sensor, check wiring!");
-      error_flag = TRUE;
+      error_flag = true;
   } else error_flag = false;
 #endif
 
@@ -586,7 +586,7 @@ mDNSname = unit_id;
   delay(20);
   if (tcs.begin()) {
     debugln("Found sensor");
-    error_flag = TRUE;
+    error_flag = true;
   } else {
     debugln("No TCS34725 found ... check your connections");
     error_flag = false;
@@ -614,7 +614,7 @@ mDNSname = unit_id;
   Wire.begin(sda_pin, clk_pin);
   if (!APDS.begin()) {
     debuglnln("Error initializing APDS-9960 sensor.");
-    error_flag = TRUE;
+    error_flag = true;
   } else error_flag = false;
 
 #endif
@@ -625,7 +625,7 @@ mDNSname = unit_id;
   if (!sensor.init())
   {
     Serial.println("Failed to detect and initialize sensor!");
-    error_flag = TRUE;
+    error_flag = true;
 
     // Start continuous back-to-back mode (take readings as
     // fast as possible).  To use continuous timed mode
@@ -644,7 +644,7 @@ mDNSname = unit_id;
   if (!sensor.init())
   {
     Serial.println("Failed to detect and initialize TOF1!");
-    error_flag = TRUE;
+    error_flag = true;
   } else {
     // Use long distance mode and allow up to 50000 us (50 ms) for a measurement.
     // You can change these settings to adjust the performance of the sensor, but
@@ -703,7 +703,7 @@ mDNSname = unit_id;
 
   if (!ads.begin()) {
     debugln("Failed to initialize ADS.");
-    error_flag = TRUE;
+    error_flag = true;
   } else error_flag = false;
 #endif
 
@@ -873,9 +873,8 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef THERMAL_CAMERA
-        if(!error_flag){
-
-
+        boolean rc;
+        if (!error_flag) {
         StaticJsonDocument<1024> doc;
         JsonArray data = doc.createNestedArray("value");
           amg.readPixels(pixels);
@@ -894,9 +893,10 @@ if (WiFi.status() == WL_CONNECTED){
 
           client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
           // debug("mqtt buffer size: "); debugln(client.getBufferSize());
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
         }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
