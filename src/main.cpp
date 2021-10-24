@@ -254,58 +254,72 @@ PubSubClient client(espClient);
 #ifdef DUMMY
   const unsigned long sensorInterval = 1000;
   const String sensor_type = DUMMY_LABEL;
+  const String sensor_model = DUMMY_LABEL;
 #endif
 #ifdef PROXIMITY
   const unsigned long sensorInterval = 3000;
   const String sensor_type = PROXIMITY_LABEL;
+  const String sensor_model = "HC-SR04";
 #endif
 #ifdef WEIGHT
   const unsigned long sensorInterval = 1000;
   const String sensor_type = WEIGHT_LABEL;
+  const String sensor_model = "HX711";
 #endif
 #ifdef GYRO
   const unsigned long sensorInterval = 1000;
   const String sensor_type = GYRO_LABEL;
+  const String sensor_model = "BN0055";
 #endif
 #ifdef THERMAL_CAMERA
   const unsigned long sensorInterval = 500;
   const String sensor_type = THERMAL_CAMERA_LABEL;
+  const String sensor_model = "AMG8833";
 #endif
 #ifdef SOCKET
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SOCKET_LABEL;
+  const String sensor_model = "sonoff socket";
 #endif
 #ifdef SERVO
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SERVO2_LABEL;
+  const String sensor_model = "MG996R";
 #endif
 #ifdef GESTURE
   const unsigned long sensorInterval = 500;
   const String sensor_type = GESTURE_LABEL;
+  const String sensor_model = "APDS9960";
 #endif
 #ifdef TOF0
   const unsigned long sensorInterval = 300;
   const String sensor_type = TOF0_LABEL;
+  const String sensor_model = "VL53L0X";
 #endif
 #ifdef TOF1
   const unsigned long sensorInterval = 300;
   const String sensor_type = TOF1_LABEL;
+  const String sensor_model = "VL53L1X";
 #endif
 #ifdef HUMIDITY
   const unsigned long sensorInterval = 1000;
   const String sensor_type = HUMIDITY_LABEL;
+  const String sensor_model = "-";
 #endif
 #ifdef RGB
   const unsigned long sensorInterval = 500;
   const String sensor_type = RGB_LABEL;
+  const String sensor_model = "ISL29125";
 #endif
 #ifdef MIC
   const unsigned long sensorInterval = 300;
   const String sensor_type = MIC_LABEL;
+  const String sensor_model = "ADS1015+MAX9814";
 #endif
 #ifdef SRF01
   const unsigned long sensorInterval = 400;
   const String sensor_type = SRF01_LABEL;
+  const String sensor_model = "SRF01";
 #endif
 
 
@@ -1202,7 +1216,8 @@ if (WiFi.status() == WL_CONNECTED){
         #endif
 
         doc["type"] = sensor_type;
-
+        doc["model"] = sensor_model;
+        
         char out[256];
         serializeJson(doc, out);
 
