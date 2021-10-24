@@ -16,7 +16,7 @@
 
 // #define SOCKET
 #define SERVO   // CHANGE PLATFORM, NOT SONOFF!!!
-// #define STEPPER
+
 
 
 //------------------------------------------------------------------------------
@@ -29,7 +29,6 @@
 #define THERMAL_CAMERA_LABEL "thermal_camera"
 #define SOCKET_LABEL "socket"
 #define SERVO2_LABEL "sand"
-#define STEPPER_LABEL "stepper"
 #define GESTURE_LABEL "gesture"
 #define TOF0_LABEL "proximity"
 #define TOF1_LABEL "proximity"
@@ -39,7 +38,9 @@
 #define SRF01_LABEL "proximity"
 
 #define MQTT_TOPIC "resonance/sensor/"
-#define MQTT_SUB_TOPIC "resonance/socket/"
+#define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
+#define MQTT_SUB_TOPIC_SERVO "resonance/actor/"
+
 #define MQTT_ALIVE 60                                   // alive time in secs
 
 #define MQTT_REPORT
@@ -118,13 +119,6 @@ extern "C"{
   #include <Servo.h>
 #endif
 
-#ifdef STEPPER
-  #include <AccelStepper.h>
-
-  #define STEPPER_MAX_SPEED 500
-  #define STEPPER_ACC 100
-#endif
-
 #ifdef GESTURE
   #include <Arduino_APDS9960.h>
 #endif
@@ -195,13 +189,6 @@ extern "C"{
   Servo myservo;
 #endif
 
-#ifdef STEPPER
-  // Define a stepper and the pins it will use
-  // 1 - DRIVER, 4 (SDA) - step, 14 (SCLK) dir
-  AccelStepper stepper(AccelStepper::DRIVER, 4, 14);
-  // AccelStepper stepper(1, 4, 14);    //  AccelStepper::DRIVER (1) means a stepper driver (with Step and Direction pins).
-#endif
-
 #if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT) || defined(RGB) || defined(MIC)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
@@ -235,10 +222,6 @@ PubSubClient client(espClient);
 #ifdef WEIGHT
   HX711_ADC LoadCell(sda_pin, clk_pin);
   long t;
-#endif
-
-#ifdef STEPPER
-  int pos = 500;
 #endif
 
 #ifdef SERVO
@@ -291,10 +274,6 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 1000;
   const String sensor_type = SERVO2_LABEL;
 #endif
-#ifdef STEPPER
-  const unsigned long sensorInterval = 1000;
-  const String sensor_type = STEPPER_LABEL;
-#endif
 #ifdef GESTURE
   const unsigned long sensorInterval = 500;
   const String sensor_type = GESTURE_LABEL;
@@ -327,7 +306,9 @@ PubSubClient client(espClient);
 
 // form mqtt topic based on template and id
 #if defined (SOCKET)
-  String topicPrefix = MQTT_SUB_TOPIC;
+  String topicPrefix = MQTT_SUB_TOPIC_SOCKET;
+#elif defined (SERVO)
+  String topicPrefix = MQTT_SUB_TOPIC_SERVO;
 #else
   String topicPrefix = MQTT_TOPIC;
 #endif
@@ -335,7 +316,7 @@ PubSubClient client(espClient);
 String topic = "";
 String error_topic = "";
 String subscribe_topic_relay = "";
-String subscribe_topic_stepper = "";
+String subscribe_topic_servo = "";
 String mDNSname = "";
 String button_topic = "";
 
@@ -395,9 +376,9 @@ boolean reconnect() {
     client.setKeepAlive(MQTT_ALIVE);
     debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
     client.subscribe(subscribe_topic_relay.c_str());   // resubscribe mqtt
-    #ifdef STEPPER
-      client.subscribe(subscribe_topic_stepper.c_str());
-      debug("subscribed for topic: "); debugln(subscribe_topic_stepper);
+    #ifdef SERVO
+      client.subscribe(subscribe_topic_servo.c_str());
+      debug("subscribed for topic: "); debugln(subscribe_topic_servo);
     #endif
     debug("subscribed for topic: "); debugln(subscribe_topic_relay);
   }
@@ -444,31 +425,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
     }
   }
 
-  #ifdef STEPPER
+  #ifdef SERVO
 
-  // Convert the payload
-  // char format[16];
-  // snprintf(format, sizeof format, "%%%ud", length);
-  // int payload_value = 0;
-  // if (sscanf((const char *) payload, format, &payload_value) == 1)
-  //   Serial.println(payload_value);
-  // else
-  //   ; // Conversion error occurred
+    // Convert the payload
+    // char format[16];
+    // snprintf(format, sizeof format, "%%%ud", length);
+    // int payload_value = 0;
+    // if (sscanf((const char *) payload, format, &payload_value) == 1)
+    //   Serial.println(payload_value);
+    // else
+    //   ; // Conversion error occurred
 
-  if (String(topic) == subscribe_topic_stepper.c_str()){
-    int payload_value = atoi((char*)payload);
-    debug("received position message "); debugln(payload_value);
-    // TODO add global limits and homeing
-    if (payload_value < 0) {
-      pos = 0;
-    } else if (payload_value >= 0 && payload_value < 500){
-      pos = payload_value;
-    } else if (payload_value > 500) {pos = 500;}
-    else {debug("received wrong format stepper position: "); debugln(payload_value);}
-  }
+    if (String(topic) == subscribe_topic_servo.c_str()){
+      int payload_value = atoi((char*)payload);
+      debug("received position message "); debugln(payload_value);
+      // TODO add global limits and homeing
+      if (payload_value < 0) {
+        pos = 0;
+        //TODO update limits to valve!!!
+      } else if (payload_value >= 0 && payload_value < 360){
+        pos = payload_value;
+      } else if (payload_value > 360) {pos = 360;}
+      else {debug("received wrong format servo position: "); debugln(payload_value);}
+    }
 
-  debug("moving motor to: "); debugln(pos);
-  stepper.moveTo(pos);
+    debug("moving servo to: "); debugln(pos);
+    myservo.write(pos);
   #endif
 
   debugln("- - - - - - - - - - - - -");
@@ -528,8 +510,8 @@ debug("Device ID: "); debugln(unit_id);
 topic = topicPrefix + sensor_type + "/" + unit_id;
 error_topic = topicPrefix + "/error";
 subscribe_topic_relay = topic + "/relay";
-#ifdef STEPPER
-  subscribe_topic_stepper = topic + "/set";
+#ifdef SERVO
+  subscribe_topic_servo = topic + "/set";
 #endif
 mDNSname = unit_id;
 
@@ -607,13 +589,6 @@ mDNSname = unit_id;
   delay(1000);
   pos = 100;
   myservo.write(pos);
-#endif
-
-#ifdef STEPPER
-  // stepper set to 16 microsteps
-  stepper.setMaxSpeed(STEPPER_MAX_SPEED);
-  stepper.setAcceleration(STEPPER_ACC);
-  stepper.moveTo(500);  // TODO test purpose only, add homeing, remove
 #endif
 
 #ifdef GESTURE
@@ -795,10 +770,6 @@ if (WiFi.status() == WL_CONNECTED){
 
   #ifdef GYRO
     if (!error_flag) gyro.read();
-  #endif
-
-  #ifdef STEPPER
-    stepper.run();
   #endif
 
   #ifdef GESTURE
@@ -986,20 +957,6 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef STEPPER
-        StaticJsonDocument<128> doc;
-        doc["stepper set position"] = pos;
-        doc["stepper live position"] = stepper.currentPosition();
-        char out[128];
-        serializeJson(doc, out);
-        boolean rc = client.publish(data_topic_char, out);
-        if (!rc) {
-          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
-          digitalWrite(sonoff_led_blue, LOW);
-        }
-        else debugln("MQTT data send successfully");
-      #endif
-
       #ifdef GESTURE
         if(!error_flag){
           StaticJsonDocument<128> doc;
@@ -1167,8 +1124,6 @@ if (WiFi.status() == WL_CONNECTED){
           const char* sensor_type = SOCKET_LABEL;
         #elif defined (SERVO)
           const char* sensor_type = SERVO2_LABEL;
-        #elif defined (STEPPER)
-          const char* sensor_type = STEPPER_LABEL;
         #elif defined (GESTURE)
             const char* sensor_type = GESTURE_LABEL;
         #elif defined (HUMIDITY)
