@@ -1,23 +1,25 @@
 #define VERSION "1.7.1"
+//NOTE remember to update document with versioning:
+// https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define DUMMY            // no sensor connected, just send random values
+#define DUMMY            // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-#define THERMAL_CAMERA
+// #define THERMAL_CAMERA
 // #define RGB
 // #define MIC
-// #define SRF01
+// #define SRF01 // connection detection does not work
 // #define PROXIMITY
 // #define WEIGHT
 // #define GYRO
 
 // #define SOCKET
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!! 
+// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
-
+//TODO add report info about sub category sensor type i.e TOF1 etc
 
 //------------------------------------------------------------------------------
 
@@ -137,6 +139,7 @@ extern "C"{
 #endif
 
 #ifdef HUMIDITY
+  // TODO replace with DTH
   #include <Wire.h>
   #include "ClosedCube_HDC1080.h"
   ClosedCube_HDC1080 hdc1080;
@@ -203,6 +206,7 @@ extern "C"{
 
 //------------------------------- VARs declarations ----------------------------
 bool error_flag = false;
+boolean rc; // mqtt sending response flag, true - eroor sending, flase ok
 
 #ifdef MQTT_REPORT
   unsigned long previousReportTime = millis();
@@ -551,8 +555,17 @@ mDNSname = unit_id;
 #ifdef WEIGHT
   float calValue = 696;             // calibration value, depends on your individual load cell setup
   LoadCell.begin();                 // start connection to load cell module
-  LoadCell.start(2000);             // tare preciscion can be enhanced by adding a few seconds of stabilising time
-  LoadCell.setCalFactor(calValue);
+
+  LoadCell.start(2000);
+  if (LoadCell.getTareTimeoutFlag()) {
+    debugln("Timeout, check MCU>HX711 wiring and pin designations");
+    error_flag = true;
+  }
+  else {
+    LoadCell.setCalFactor(calValue); // set calibration factor (float)
+    Serial.println("HX711 startup is complete");
+    error_flag = false;
+  }
 #endif
 
 #ifdef GYRO
@@ -582,14 +595,15 @@ mDNSname = unit_id;
 #endif
 
 #ifdef RGB
-  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin(4, 14);
   delay(20);
   if (tcs.begin()) {
     debugln("Found sensor");
-    error_flag = true;
+    error_flag = false;
   } else {
     debugln("No TCS34725 found ... check your connections");
-    error_flag = false;
+    error_flag = true;
   }
 #endif
 
@@ -613,7 +627,7 @@ mDNSname = unit_id;
 #ifdef GESTURE
   Wire.begin(sda_pin, clk_pin);
   if (!APDS.begin()) {
-    debuglnln("Error initializing APDS-9960 sensor.");
+    debugln("Error initializing APDS-9960 sensor.");
     error_flag = true;
   } else error_flag = false;
 
@@ -714,9 +728,19 @@ mDNSname = unit_id;
 
   byte softVer;
   SRF01_Cmd(SRF_ADDRESS, GETSOFT);                        // Request the SRF01 software version
-  while (srf01.available() < 1);
+  // while (srf01.available() < 1);
+  //   softVer = srf01.read();
+  //   debug("V"); debugln(softVer);
+
+  //TODO connection detection does not work
+  if (srf01.available() < 1){
     softVer = srf01.read();
     debug("V"); debugln(softVer);
+    error_flag = false;
+  } else {
+    debugln("Failed to initialize ADS.");
+    error_flag = true;
+  }
 #endif
 
 
@@ -828,9 +852,9 @@ if (WiFi.status() == WL_CONNECTED){
         char out[128];
         serializeJson(doc, out);
         if (!error_flag) {
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
@@ -838,10 +862,22 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef WEIGHT
         if (!error_flag){
-          float data = LoadCell.getData();
-          debug("Weight: ");
-          debugln(data);
+
+        StaticJsonDocument<128> doc;
+        doc["value"] = LoadCell.getData();
+        doc["calibration"] = LoadCell.getData();
+        doc["setling"] =LoadCell.getSettlingTime();
+
+        char out[128];
+        serializeJson(doc, out);
+
+        rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
         }
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+
       #endif
 
       #ifdef PROXIMITY
@@ -851,29 +887,28 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef GYRO
-        if (!error_flag){
-          debug("G ");
-          debug("X: ");
-          debug((int)gyro.g.x);
-          debug(" Y: ");
-          debug((int)gyro.g.y);
-          debug(" Z: ");
-          debugln((int)gyro.g.z);
+        if (!error_flag) {
+          StaticJsonDocument<1024> doc;
+          JsonArray data = doc.createNestedArray("value");
+            data.add((int)gyro.g.x);
+            data.add((int)gyro.g.y);
+            data.add((int)gyro.g.z);
+          char out[1024];
+          serializeJson(doc, out);
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
 
-          int dataX = (int)gyro.g.x;
-          int dataY = (int)gyro.g.y;
-          int dataZ = (int)gyro.g.z;
-
-        //TODO make JSON
-        String gyro_data = String(dataX) + "," + String(dataY) + "," + String(dataZ);
-        client.publish(data_topic_char, gyro_data.c_str());
-      } else {
-        client.publish(error_topic, gyro_data.c_str());
-      }
       #endif
 
       #ifdef THERMAL_CAMERA
-        boolean rc;
         if (!error_flag) {
         StaticJsonDocument<1024> doc;
         JsonArray data = doc.createNestedArray("value");
@@ -881,7 +916,6 @@ if (WiFi.status() == WL_CONNECTED){
           for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
             data.add(pixels[i-1]);
           }
-
           char out[1024];
           serializeJson(doc, out);
           // debug("size of json char: "); debugln(sizeof(doc));
@@ -919,9 +953,9 @@ if (WiFi.status() == WL_CONNECTED){
         char out[128];
         serializeJson(doc, out);
 
-        boolean rc = client.publish(data_topic_char, out);
+        rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
@@ -942,7 +976,7 @@ if (WiFi.status() == WL_CONNECTED){
         debug("JSON Test value: ");
         debugln(out);
 
-        boolean rc = client.publish(data_topic_char, out);
+        rc = client.publish(data_topic_char, out);
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
@@ -950,7 +984,7 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #if defined(PROXIMITY) || defined(WEIGHT)
+      #if defined(PROXIMITY)
         char data_char[8];
         itoa(data, data_char, 10);
         client.publish(data_topic_char, data_char);
@@ -958,7 +992,6 @@ if (WiFi.status() == WL_CONNECTED){
       #endif
 
       #ifdef SERVO
-        boolean rc;
         if(!error_flag){
           StaticJsonDocument<128> doc;
           doc["valve position"] = myservo.read();
@@ -987,9 +1020,9 @@ if (WiFi.status() == WL_CONNECTED){
           char out[128];
           serializeJson(doc, out);
 
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
@@ -1015,9 +1048,9 @@ if (WiFi.status() == WL_CONNECTED){
 
         char out[128];
         serializeJson(doc, out);
-        boolean rc = client.publish(data_topic_char, out);
+        rc = client.publish(data_topic_char, out);
       } else {
-        boolean rc = client.publish(error_topic_char, "sensor not found");
+        rc = client.publish(error_topic_char, "sensor not found");
       }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
@@ -1037,9 +1070,9 @@ if (WiFi.status() == WL_CONNECTED){
           char out[128];
           serializeJson(doc, out);
 
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
@@ -1059,9 +1092,9 @@ if (WiFi.status() == WL_CONNECTED){
           char out[128];
           serializeJson(doc, out);
 
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
@@ -1094,9 +1127,9 @@ if (WiFi.status() == WL_CONNECTED){
           char out[128];
           serializeJson(doc, out);
 
-          boolean rc = client.publish(data_topic_char, out);
+          rc = client.publish(data_topic_char, out);
         } else {
-          boolean rc = client.publish(error_topic_char, "sensor not found");
+          rc = client.publish(error_topic_char, "sensor not found");
         }
         if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
         else debugln("MQTT data send successfully");
@@ -1171,7 +1204,7 @@ if (WiFi.status() == WL_CONNECTED){
         client.setBufferSize(256*2);
 
         String sys_topic_json = topic + "/sys";
-        boolean rc = client.publish(sys_topic_json.c_str(), out);
+        rc = client.publish(sys_topic_json.c_str(), out);
         if (!rc) {
           debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
           digitalWrite(sonoff_led_blue, LOW);
