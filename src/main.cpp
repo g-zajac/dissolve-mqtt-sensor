@@ -115,7 +115,8 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #ifdef SERVO
-  #define SERVO2_PIN 14
+  #define SERVO_SPEED 10
+  #define SERVO_PIN 14
   #include <Servo.h>
 #endif
 
@@ -226,6 +227,7 @@ PubSubClient client(espClient);
 
 #ifdef SERVO
   #define sonoff_led_blue 2 // build in LED on chip
+  int prev_pos = 0;
   int pos = 0; // variable to store the servo position
 #endif
 
@@ -439,18 +441,37 @@ void callback(char* topic, byte* payload, unsigned int length) {
     if (String(topic) == subscribe_topic_servo.c_str()){
       int payload_value = atoi((char*)payload);
       debug("received position message "); debugln(payload_value);
-      // TODO add global limits and homeing
+      prev_pos = myservo.read();
+      debug("previous position "); debugln(prev_pos);
       if (payload_value < 0) {
         pos = 0;
         //TODO update limits to valve!!!
-      } else if (payload_value >= 0 && payload_value < 360){
+        //TODO add map 0-100 open/close scaling, after calibrating, #define max and min
+      } else if (payload_value >= 0 && payload_value < 199){
         pos = payload_value;
-      } else if (payload_value > 360) {pos = 360;}
+      } else if (payload_value > 199) {pos = 199;}
       else {debug("received wrong format servo position: "); debugln(payload_value);}
     }
 
     debug("moving servo to: "); debugln(pos);
-    myservo.write(pos);
+    if (pos > prev_pos){
+      for (int p = prev_pos; p <= pos; p+=1 ){
+      debug(p);
+      myservo.write(p);
+      delay(SERVO_SPEED);
+      }
+    } else if (pos < prev_pos){
+      for (int p = prev_pos; p >= pos; p-=1 ){
+      debug(p);
+      myservo.write(p);
+      delay(SERVO_SPEED);
+      }
+    } else {
+      debugln("position the same, do nothing");
+    }
+    debugln("moving servo completed");
+
+
   #endif
 
   debugln("- - - - - - - - - - - - -");
@@ -583,12 +604,10 @@ mDNSname = unit_id;
 #endif
 
 #ifdef SERVO
-  myservo.attach(SERVO2_PIN);
-  pos = 0;
-  myservo.write(pos);
-  delay(1000);
-  pos = 100;
-  myservo.write(pos);
+  // NOTE keep oryginal position without change on start
+  myservo.attach(SERVO_PIN);
+  pos = myservo.read();
+  debug("servo @ position: "); debugln(pos);
 #endif
 
 #ifdef GESTURE
