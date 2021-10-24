@@ -8,36 +8,18 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 // #define RGB
 // #define MIC
 // #define SRF01 // connection detection does not work
-#define PROXIMITY // double eye sensor
+// #define PROXIMITY // double eye sensor
 // #define WEIGHT
 // #define GYRO
 // #define SOCKET
+
 // #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
-//TODO add report info about sub category sensor type i.e TOF1 etc
-
 //------------------------------------------------------------------------------
-
-// Sensors labels, used in MQTT topic, report, mDNS etc
-#define DUMMY_LABEL "dummy"
-#define PROXIMITY_LABEL "proximity"
-#define WEIGHT_LABEL "weight"
-#define GYRO_LABEL "gyro"
-#define THERMAL_CAMERA_LABEL "thermal_camera"
-#define SOCKET_LABEL "socket"
-#define SERVO2_LABEL "sand"
-#define GESTURE_LABEL "gesture"
-#define TOF0_LABEL "proximity"
-#define TOF1_LABEL "proximity"
-#define HUMIDITY_LABEL "humidity"
-#define RGB_LABEL "light"
-#define MIC_LABEL "microphone"
-#define SRF01_LABEL "proximity"
-
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
 #define MQTT_SUB_TOPIC_SERVO "resonance/actor/"
@@ -251,74 +233,75 @@ PubSubClient client(espClient);
 
 //------------------------------------------------------------------------------
 // TODO move to lib, external object?
+// Sensors labels, used in MQTT topic, report, mDNS etc
 #ifdef DUMMY
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = DUMMY_LABEL;
-  const String sensor_model = DUMMY_LABEL;
+  const String sensor_type = "dummy";
+  const String sensor_model = "dummy";
 #endif
 #ifdef PROXIMITY
   const unsigned long sensorInterval = 3000;
-  const String sensor_type = PROXIMITY_LABEL;
+  const String sensor_type = "proximity";
   const String sensor_model = "HC-SR04";
 #endif
 #ifdef WEIGHT
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = WEIGHT_LABEL;
+  const String sensor_type = "weight";
   const String sensor_model = "HX711";
 #endif
 #ifdef GYRO
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = GYRO_LABEL;
+  const String sensor_type = "gyro";
   const String sensor_model = "BN0055";
 #endif
 #ifdef THERMAL_CAMERA
   const unsigned long sensorInterval = 500;
-  const String sensor_type = THERMAL_CAMERA_LABEL;
+  const String sensor_type = "thermal_camera";
   const String sensor_model = "AMG8833";
 #endif
 #ifdef SOCKET
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = SOCKET_LABEL;
+  const String sensor_type = "socket";
   const String sensor_model = "sonoff socket";
 #endif
 #ifdef SERVO
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = SERVO2_LABEL;
+  const String sensor_type = "sand";
   const String sensor_model = "MG996R";
 #endif
 #ifdef GESTURE
   const unsigned long sensorInterval = 500;
-  const String sensor_type = GESTURE_LABEL;
+  const String sensor_type = "gesture";
   const String sensor_model = "APDS9960";
 #endif
 #ifdef TOF0
   const unsigned long sensorInterval = 300;
-  const String sensor_type = TOF0_LABEL;
+  const String sensor_type = "proximity";
   const String sensor_model = "VL53L0X";
 #endif
 #ifdef TOF1
   const unsigned long sensorInterval = 300;
-  const String sensor_type = TOF1_LABEL;
+  const String sensor_type = "proximity";
   const String sensor_model = "VL53L1X";
 #endif
 #ifdef HUMIDITY
   const unsigned long sensorInterval = 1000;
-  const String sensor_type = HUMIDITY_LABEL;
+  const String sensor_type = "humidity";
   const String sensor_model = "-";
 #endif
 #ifdef RGB
   const unsigned long sensorInterval = 500;
-  const String sensor_type = RGB_LABEL;
+  const String sensor_type = "light";
   const String sensor_model = "ISL29125";
 #endif
 #ifdef MIC
   const unsigned long sensorInterval = 300;
-  const String sensor_type = MIC_LABEL;
+  const String sensor_type = "mic";
   const String sensor_model = "ADS1015+MAX9814";
 #endif
 #ifdef SRF01
   const unsigned long sensorInterval = 400;
-  const String sensor_type = SRF01_LABEL;
+  const String sensor_type = "proximity";
   const String sensor_model = "SRF01";
 #endif
 
@@ -1165,10 +1148,11 @@ if (WiFi.status() == WL_CONNECTED){
   #ifdef MQTT_REPORT
     unsigned long reportDiff = millis() - previousReportTime;
       if((reportDiff > reportInterval) && client.connected()){
-
+        // TODO split the report, static info send only once when connecting to MQTT
+        // TODO dynamic values like uptime, relay status etc send here every 5sec? 10 sec?
         digitalWrite(sonoff_led_blue, LOW);
 
-        StaticJsonDocument<256> doc;
+        StaticJsonDocument<512> doc;
         doc["version"] = VERSION;
         //TODO add sub object json compilation - date and time
         doc["compilation_date"] = __DATE__ ;
@@ -1182,48 +1166,15 @@ if (WiFi.status() == WL_CONNECTED){
         doc["mqtt-connections"] = mqttConnetionsCounter;
         doc["wifi-connections"] = wifiConnetionsCounter;
         doc["sampling"] = sensorInterval;
-
-        #if defined (PROXIMITY)
-          const char* sensor_type = PROXIMITY_LABEL;
-        #elif defined (WEIGHT)
-        const char* sensor_type = WEIGHT_LABEL;
-        #elif defined (GYRO)
-          const char* sensor_type = GYRO_LABEL;
-        #elif defined (THERMAL_CAMERA)
-          const char* sensor_type = THERMAL_CAMERA_LABEL;
-        #elif defined (DUMMY)
-          const char* sensor_type = DUMMY_LABEL;
-        #elif defined (SOCKET)
-          const char* sensor_type = SOCKET_LABEL;
-        #elif defined (SERVO)
-          const char* sensor_type = SERVO2_LABEL;
-        #elif defined (GESTURE)
-            const char* sensor_type = GESTURE_LABEL;
-        #elif defined (HUMIDITY)
-            const char* sensor_type = HUMIDITY_LABEL;
-        #elif defined (TOF0)
-            const char* sensor_type = TOF0_LABEL;
-        #elif defined (TOF1)
-            const char* sensor_type = TOF1_LABEL;
-        #elif defined (RGB)
-            const char* sensor_type = RGB_LABEL;
-        #elif defined (MIC)
-            const char* sensor_type = MIC_LABEL;
-        #elif defined (SRF01)
-            const char* sensor_type = MIC_LABEL;
-        #else
-          const char* sensor_type = "not-defined";
-        #endif
-
         doc["type"] = sensor_type;
         doc["model"] = sensor_model;
-        
-        char out[256];
+
+        char out[512];
         serializeJson(doc, out);
 
         debug("mqtt message size: "); debug(strlen(out));
         debug(", mqtt buffer size: "); debugln(client.getBufferSize());
-        client.setBufferSize(256*2);
+        client.setBufferSize(1024);
 
         String sys_topic_json = topic + "/sys";
         rc = client.publish(sys_topic_json.c_str(), out);
