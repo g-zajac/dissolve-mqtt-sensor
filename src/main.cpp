@@ -11,13 +11,13 @@
 // #define THERMAL_CAMERA
 // #define RGB
 // #define MIC
-// #define SRF01 // connection detection does not work
+// #define SRF01      // connection detection does not work
 // #define PROXIMITY // double eye sensor
 // #define WEIGHT
-// #define GYRO
+#define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -576,7 +576,7 @@ mDNSname = unit_id;
 #endif
 
 #ifdef GYRO
-  Wire.begin(sda_pin, clk_pin);
+  // Wire.begin(sda_pin, clk_pin);
   if (!bno.begin())
   {
     debugln("Failed to autodetect gyro!");
@@ -815,15 +815,7 @@ if (WiFi.status() == WL_CONNECTED){
   #endif
 
   #ifdef GYRO
-    if (!error_flag){
-      sensors_event_t orientationData , angVelocityData , linearAccelData, magnetometerData, accelerometerData, gravityData;
-      bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-      bno.getEvent(&angVelocityData, Adafruit_BNO055::VECTOR_GYROSCOPE);
-      bno.getEvent(&linearAccelData, Adafruit_BNO055::VECTOR_LINEARACCEL);
-      bno.getEvent(&magnetometerData, Adafruit_BNO055::VECTOR_MAGNETOMETER);
-      bno.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-      bno.getEvent(&gravityData, Adafruit_BNO055::VECTOR_GRAVITY);
-    }
+    //
   #endif
 
   #ifdef GESTURE
@@ -918,11 +910,40 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef GYRO
         if (!error_flag) {
+
+          sensors_event_t event;
+          bno.getEvent(&event);
+
           StaticJsonDocument<1024> doc;
-          JsonArray data = doc.createNestedArray("value");
-            data.add((int)gyro.g.x);
-            data.add((int)gyro.g.y);
-            data.add((int)gyro.g.z);
+          JsonArray data1 = doc.createNestedArray("orientation");
+          data1.add((360 - (float)event.orientation.x));
+          data1.add((float)event.orientation.y);
+          data1.add((float)event.orientation.z);
+
+          // imu::Quaternion quat = bno.getQuat();
+          // JsonArray data2 = doc.createNestedArray("quaternion");
+          // data2.add((float)quat.w());
+          // data2.add((float)quat.x());
+          // data2.add((float)quat.y());
+          // data2.add((float)quat.z());
+
+          JsonArray data3 = doc.createNestedArray("acceleration");
+          data3.add((float)event.acceleration.x);
+          data3.add((float)event.acceleration.y);
+          data3.add((float)event.acceleration.z);
+
+          JsonArray data4 = doc.createNestedArray("gyro");
+          data4.add((float)event.gyro.x);
+          data4.add((float)event.gyro.y);
+          data4.add((float)event.gyro.z);
+
+          JsonArray data5 = doc.createNestedArray("magnetic");
+          data5.add((float)event.magnetic.x);
+          data5.add((float)event.magnetic.y);
+          data5.add((float)event.magnetic.z);
+
+          doc["temperature"] = bno.getTemp();
+
           char out[1024];
           serializeJson(doc, out);
           rc = client.publish(data_topic_char, out);
