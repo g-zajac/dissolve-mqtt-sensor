@@ -28,5 +28,6 @@ const device_details devices[] = {
   {0x00664552, "018"},
   {0x006643D4, "019"},
   {0x00664871, "020"},
+  {0x0022AD43, "021"},  // Mobile Gyro (Wemos D1)
   {0x00, "099"} // default if not defined above
 };
