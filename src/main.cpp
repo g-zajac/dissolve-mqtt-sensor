@@ -147,7 +147,14 @@ extern "C"{
 #endif
 
 //--------------------------------- PIN CONFIG ---------------------------------
-#define sonoff_led_blue 13
+#ifndef GYRO
+  #define sonoff_led_blue 13
+#endif
+
+// wemos pin 2 (D4)
+#ifdef GYRO
+  #define sonoff_led_blue 2
+#endif
 
 #ifdef BUTTON
   #define sonoff_button_pin 0 //16?
