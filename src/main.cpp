@@ -8,7 +8,7 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-#define THERMAL_CAMERA
+// #define THERMAL_CAMERA
 // #define RGB
 // #define MIC
 // #define SRF01 // connection detection does not work
@@ -17,7 +17,7 @@
 // #define GYRO
 // #define SOCKET
 
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -74,8 +74,12 @@ extern "C"{
 
 #ifdef GYRO
   #include <Wire.h>
-  #include <L3G.h>
-  L3G gyro;
+  // #include <L3G.h>
+  // L3G gyro;
+  #include <Wire.h>
+  #include <Adafruit_Sensor.h>
+  #include <Adafruit_BNO055.h>
+  #include <utility/imumaths.h>
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -174,7 +178,16 @@ extern "C"{
   Servo myservo;
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(GYRO) || defined(WEIGHT) || defined(RGB) || defined(MIC)
+#ifdef GYRO
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
+  /* Set the delay between fresh samples */
+  uint16_t BNO055_SAMPLERATE_DELAY_MS = 100;
+  // Check I2C device address and correct line below (by default address is 0x29 or 0x28)
+  Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
+#endif
+
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -250,7 +263,7 @@ PubSubClient client(espClient);
   const String sensor_model = "HX711";
 #endif
 #ifdef GYRO
-  const unsigned long sensorInterval = 1000;
+  const unsigned long sensorInterval = 500;
   const String sensor_type = "gyro";
   const String sensor_model = "BN0055";
 #endif
@@ -564,12 +577,11 @@ mDNSname = unit_id;
 
 #ifdef GYRO
   Wire.begin(sda_pin, clk_pin);
-  if (!gyro.init())
+  if (!bno.begin())
   {
-    debugln("Failed to autodetect gyro type!");
+    debugln("Failed to autodetect gyro!");
     error_flag = true;
   } else {
-    gyro.enableDefault();
     debugln("gyro connected");
     error_flag = false;
   }
@@ -803,7 +815,15 @@ if (WiFi.status() == WL_CONNECTED){
   #endif
 
   #ifdef GYRO
-    if (!error_flag) gyro.read();
+    if (!error_flag){
+      sensors_event_t orientationData , angVelocityData , linearAccelData, magnetometerData, accelerometerData, gravityData;
+      bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
+      bno.getEvent(&angVelocityData, Adafruit_BNO055::VECTOR_GYROSCOPE);
+      bno.getEvent(&linearAccelData, Adafruit_BNO055::VECTOR_LINEARACCEL);
+      bno.getEvent(&magnetometerData, Adafruit_BNO055::VECTOR_MAGNETOMETER);
+      bno.getEvent(&accelerometerData, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+      bno.getEvent(&gravityData, Adafruit_BNO055::VECTOR_GRAVITY);
+    }
   #endif
 
   #ifdef GESTURE
