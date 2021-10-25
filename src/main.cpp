@@ -179,8 +179,9 @@ extern "C"{
 #endif
 
 #ifdef GYRO
+  // Wemos D1 different I2C pins!!!
   #define sda_pin 4 //D2 SDA - white
-  #define clk_pin 14//D5 SCLK - red
+  #define clk_pin 5//D1 SCLK - red
   /* Set the delay between fresh samples */
   uint16_t BNO055_SAMPLERATE_DELAY_MS = 100;
   // Check I2C device address and correct line below (by default address is 0x29 or 0x28)
@@ -576,7 +577,7 @@ mDNSname = unit_id;
 #endif
 
 #ifdef GYRO
-  // Wire.begin(sda_pin, clk_pin);
+  Wire.begin(sda_pin, clk_pin);
   if (!bno.begin())
   {
     debugln("Failed to autodetect gyro!");
