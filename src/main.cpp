@@ -74,8 +74,6 @@ extern "C"{
 
 #ifdef GYRO
   #include <Wire.h>
-  // #include <L3G.h>
-  // L3G gyro;
   #include <Wire.h>
   #include <Adafruit_Sensor.h>
   #include <Adafruit_BNO055.h>
@@ -271,7 +269,7 @@ PubSubClient client(espClient);
   const String sensor_model = "HX711";
 #endif
 #ifdef GYRO
-  const unsigned long sensorInterval = 500;
+  const unsigned long sensorInterval = 300;
   const String sensor_type = "gyro";
   const String sensor_model = "BN0055";
 #endif
