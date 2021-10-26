@@ -130,8 +130,9 @@ extern "C"{
 #endif
 
 #ifdef DHT
-  #include <Adafruit_Sensor.h>
-  #include "DHT.h"
+  // #include <Adafruit_Sensor.h>
+  // #include "DHT.h"
+  #include "DHTesp.h"
 #endif
 
 #ifdef MIC
@@ -213,7 +214,8 @@ extern "C"{
 #ifdef DHT
   #define DHTPIN 14 // red     // Digital pin connected to the DHT sensor
   #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321 - // pin 1 from left 3V3, 2 data, 3 GND
-  DHT dht(DHTPIN, DHTTYPE);
+  // DHT dht(DHTPIN, DHTTYPE, 11);
+  DHTesp dht;
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -263,7 +265,8 @@ PubSubClient client(espClient);
 #endif
 
 #ifdef DHT
-  float h,t;
+  float h = 0;
+  float t =0;
 #endif
 
 //------------------------------------------------------------------------------
@@ -730,16 +733,18 @@ mDNSname = unit_id;
 #endif
 
 #ifdef DHT
-  dht.begin();
-  delay(20);
-  h = dht.readHumidity();
-  t = dht.readTemperature();
+  // dht.begin();
+  dht.setup(14, DHTesp::DHT22);
+  delay(1000);
+  h = dht.getHumidity();
+  t = dht.getTemperature();
 
   if (isnan(h) || isnan(t)) {
     debugln(F("Failed to read from DHT sensor!"));
     error_flag = true;
   } else {
     debug("temp: "); debug(t); debug("humidity: "); debugln(h);
+    error_flag = false;
   }
 #endif
 
@@ -1167,10 +1172,10 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef HUMIDITY
+      #ifdef DHT
         if(!error_flag){
-          float h = dht.readHumidity();
-          float t = dht.readTemperature();
+          float h = dht.getHumidity();
+          float t = dht.getTemperature();
           StaticJsonDocument<128> doc;
           doc["humidity"] = h;
           doc["temeperature"] = t;
