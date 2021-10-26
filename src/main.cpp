@@ -8,13 +8,14 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
+#define DHT
 // #define THERMAL_CAMERA
 // #define RGB
 // #define MIC
 // #define SRF01      // connection detection does not work
 // #define PROXIMITY // double eye sensor
 // #define WEIGHT
-#define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
+// #define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
 // #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
@@ -128,6 +129,11 @@ extern "C"{
   ClosedCube_HDC1080 hdc1080;
 #endif
 
+#ifdef DHT
+  #include <Adafruit_Sensor.h>
+  #include "DHT.h"
+#endif
+
 #ifdef MIC
   #include <Adafruit_ADS1X15.h>
   Adafruit_ADS1015 ads;     /* Use this for the 12-bit version */
@@ -204,6 +210,12 @@ extern "C"{
   #define clk_pin 14//D5 SCLK - red
 #endif
 
+#ifdef DHT
+  #define DHTPIN 14 // red     // Digital pin connected to the DHT sensor
+  #define DHTTYPE DHT22   // DHT 22  (AM2302), AM2321 - // pin 1 from left 3V3, 2 data, 3 GND
+  DHT dht(DHTPIN, DHTTYPE);
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 bool error_flag = false;
 boolean rc; // mqtt sending response flag, true - eroor sending, flase ok
@@ -248,6 +260,10 @@ PubSubClient client(espClient);
 #ifdef MIC
   int16_t adc0;
   float volts0;
+#endif
+
+#ifdef DHT
+  float h,t;
 #endif
 
 //------------------------------------------------------------------------------
@@ -307,6 +323,11 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 1000;
   const String sensor_type = "humidity";
   const String sensor_model = "-";
+#endif
+#ifdef DHT
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = "humidity";
+  const String sensor_model = "DHT22";
 #endif
 #ifdef RGB
   const unsigned long sensorInterval = 500;
@@ -706,6 +727,20 @@ mDNSname = unit_id;
   // hdc1080.heatUp(huTime);
   // hdc1080.heatUp(10); // approx 10 sec
   // delay(10000);
+#endif
+
+#ifdef DHT
+  dht.begin();
+  delay(20);
+  h = dht.readHumidity();
+  t = dht.readTemperature();
+
+  if (isnan(h) || isnan(t)) {
+    debugln(F("Failed to read from DHT sensor!"));
+    error_flag = true;
+  } else {
+    debug("temp: "); debug(t); debug("humidity: "); debugln(h);
+  }
 #endif
 
 #ifdef MIC
@@ -1118,6 +1153,28 @@ if (WiFi.status() == WL_CONNECTED){
           delay(20);
           doc["temeperature"] = hdc1080.readTemperature();
 
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef HUMIDITY
+        if(!error_flag){
+          float h = dht.readHumidity();
+          float t = dht.readTemperature();
+          StaticJsonDocument<128> doc;
+          doc["humidity"] = h;
+          doc["temeperature"] = t;
+          doc["heat_index"] = dht.computeHeatIndex(t, h, false);
           char out[128];
           serializeJson(doc, out);
 
