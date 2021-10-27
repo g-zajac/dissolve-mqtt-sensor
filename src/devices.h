@@ -24,10 +24,11 @@ const device_details devices[] = {
   {0x006648F0, "014"},  // Humidity
   {0x00A91667, "015"},  // Humidity
   {0x0065AFF1, "016"},  // Light RGB (different then 012)
-  {0x006648F3, "017"},  
+  {0x006648F3, "017"},
   {0x00664552, "018"},
   {0x006643D4, "019"},
   {0x00664871, "020"},
   {0x0022AD43, "021"},  // Mobile Gyro on battery (Wemos D1)
+  {0x00147593, "031"},  // temporary sand valve 
   {0x00, "099"} // blank or dummy default if not defined above
 };
