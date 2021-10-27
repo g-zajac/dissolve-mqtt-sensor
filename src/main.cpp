@@ -8,9 +8,10 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-#define DHT
+// #define DHT
 // #define THERMAL_CAMERA
 // #define RGB
+#define LIGHT          //ISL29125
 // #define MIC
 // #define SRF01      // connection detection does not work
 // #define PROXIMITY // double eye sensor
@@ -148,7 +149,13 @@ extern "C"{
   #define GETRANGE         0x54                                       // Byte used to get range from SRF01
   #define GETSTATUS        0x5F
   SoftwareSerial srf01 = SoftwareSerial(SRF_TXRX, SRF_TXRX);      // Sets up software serial port for the SRF01
+#endif
 
+#ifdef LIGHT
+  #include <Wire.h>
+  #include "SparkFunISL29125.h"
+  // Declare sensor object
+  SFE_ISL29125 RGB_sensor;
 #endif
 
 //--------------------------------- PIN CONFIG ---------------------------------
@@ -218,6 +225,11 @@ extern "C"{
   DHTesp dht;
 #endif
 
+#ifdef LIGHT
+  #define sda_pin 4 //D2 SDA - white
+  #define clk_pin 14//D5 SCLK - red
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 bool error_flag = false;
 boolean rc; // mqtt sending response flag, true - eroor sending, flase ok
@@ -257,6 +269,12 @@ PubSubClient client(espClient);
 
 #ifdef RGB
   uint16_t r, g, b, c, colorTemp, lux;
+#endif
+
+#ifdef LIGHT
+  unsigned int red = RGB_sensor.readRed();
+  unsigned int green = RGB_sensor.readGreen();
+  unsigned int blue = RGB_sensor.readBlue();
 #endif
 
 #ifdef MIC
@@ -333,6 +351,11 @@ PubSubClient client(espClient);
   const String sensor_model = "DHT22";
 #endif
 #ifdef RGB
+  const unsigned long sensorInterval = 500;
+  const String sensor_type = "light";
+  const String sensor_model = "TCS34725";
+#endif
+#ifdef LIGHT
   const unsigned long sensorInterval = 500;
   const String sensor_type = "light";
   const String sensor_model = "ISL29125";
@@ -637,6 +660,19 @@ mDNSname = unit_id;
     error_flag = false;
   } else {
     debugln("No TCS34725 found ... check your connections");
+    error_flag = true;
+  }
+#endif
+
+#ifdef LIGHT
+  Wire.begin(sda_pin, clk_pin);
+  // Initialize the ISL29125 with simple configuration so it starts sampling
+  if (RGB_sensor.init())
+  {
+    debugln("Sensor ISL29125 Initialization Successful");
+    error_flag = false;
+  } else {
+    debugln("Sensor ISL29125 Initialization failed");
     error_flag = true;
   }
 #endif
@@ -1049,12 +1085,36 @@ if (WiFi.status() == WL_CONNECTED){
 
         rc = client.publish(data_topic_char, out);
         } else {
-        rc = client.publish(error_topic_char, "sensor not found");
-        debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
         }
         if (!rc) {
-        debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
-        digitalWrite(sonoff_led_blue, LOW);
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef LIGHT
+        if (!error_flag){
+
+        StaticJsonDocument<128> doc;
+        JsonArray data = doc.createNestedArray("colour");
+          data.add(RGB_sensor.readRed());
+          data.add(RGB_sensor.readGreen());
+          data.add(RGB_sensor.readBlue());
+
+        char out[128];
+        serializeJson(doc, out);
+
+        rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
         }
         else debugln("MQTT data send successfully");
       #endif
