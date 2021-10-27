@@ -1,4 +1,4 @@
-#define VERSION "1.7.1"
+#define VERSION "1.7.1b"
 //NOTE remember to update document with versioning:
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
@@ -11,7 +11,7 @@
 // #define DHT
 // #define THERMAL_CAMERA
 // #define RGB
-#define LIGHT          //ISL29125
+// #define LIGHT          //ISL29125
 // #define MIC
 // #define SRF01      // connection detection does not work
 // #define PROXIMITY // double eye sensor
@@ -19,7 +19,7 @@
 // #define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -103,7 +103,7 @@ extern "C"{
 
 #ifdef SERVO
   #define SERVO_SPEED 10
-  #define SERVO_PIN 14
+  #define SERVO_PIN 4
   #include <Servo.h>
 #endif
 
