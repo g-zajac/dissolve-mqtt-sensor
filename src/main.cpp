@@ -9,14 +9,14 @@
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
-#define THERMAL_CAMERA
-// #define RGB
+// #define THERMAL_CAMERA
+#define RGB
 // #define LIGHT          //ISL29125
 // #define MIC
 // #define SRF01      // connection detection does not work
 // #define PROXIMITY // double eye sensor
 // #define WEIGHT
-// #define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
+// #define GYRO      // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
 // #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
@@ -362,7 +362,7 @@ PubSubClient client(espClient);
 #endif
 #ifdef MIC
   const unsigned long sensorInterval = 300;
-  const String sensor_type = "mic";
+  const String sensor_type = "microphone";
   const String sensor_model = "ADS1015+MAX9814";
 #endif
 #ifdef SRF01
