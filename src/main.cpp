@@ -1,4 +1,4 @@
-#define VERSION "1.7.1b"
+#define VERSION "1.7.2"
 //NOTE remember to update document with versioning:
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
@@ -9,7 +9,7 @@
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
-// #define THERMAL_CAMERA
+#define THERMAL_CAMERA
 // #define RGB
 // #define LIGHT          //ISL29125
 // #define MIC
@@ -19,7 +19,7 @@
 // #define GYRO          // pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -1041,13 +1041,13 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef THERMAL_CAMERA
         if (!error_flag) {
-        StaticJsonDocument<1024> doc;
+        StaticJsonDocument<1152> doc;
         JsonArray data = doc.createNestedArray("value");
           amg.readPixels(pixels);
           for(int i=1; i<=AMG88xx_PIXEL_ARRAY_SIZE; i++){
             data.add(pixels[i-1]);
           }
-          char out[1024];
+          char out[1152];
           serializeJson(doc, out);
           // debug("size of json char: "); debugln(sizeof(doc));
           // debug("mqtt message size: "); debugln(strlen(out));
@@ -1056,7 +1056,7 @@ if (WiFi.status() == WL_CONNECTED){
           debugln(out);
           debugln("");
 
-          client.setBufferSize(AMG88xx_PIXEL_ARRAY_SIZE*16);
+          client.setBufferSize((AMG88xx_PIXEL_ARRAY_SIZE*16)+128);
           // debug("mqtt buffer size: "); debugln(client.getBufferSize());
           rc = client.publish(data_topic_char, out);
         } else {
