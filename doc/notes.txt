@@ -34,3 +34,8 @@ MinIMU-9 v3 Gyro, Accelerometer, and Compass (L3GD20H and LSM303D Carrier)
 
 
 earasing esp: pio run -t erase
+
+
+Thermal camera
+By default, PubSubClient limits the message size to 256 bytes (including header); see the documentation.
+https://www.esp8266.com/viewtopic.php?p=82774
