@@ -10,7 +10,7 @@
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA
-#define RGB
+// #define RGB     //        // TCS34725
 // #define LIGHT          //ISL29125
 // #define MIC
 // #define SRF01      // connection detection does not work
@@ -19,7 +19,7 @@
 // #define GYRO      // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -1145,7 +1145,7 @@ if (WiFi.status() == WL_CONNECTED){
       #ifdef SERVO
         if(!error_flag){
           StaticJsonDocument<128> doc;
-          doc["valve position"] = map(myservo.read(), 0, 180, 0, 100);
+          doc["valve_position"] = map(myservo.read(), 0, 180, 0, 100);
           char out[128];
           serializeJson(doc, out);
 
