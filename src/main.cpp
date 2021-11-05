@@ -1,4 +1,4 @@
-#define VERSION "1.7.2"
+#define VERSION "1.7.3"
 //NOTE remember to update document with versioning:
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
@@ -10,7 +10,7 @@
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA
-#define RGB
+// #define RGB     //        // TCS34725
 // #define LIGHT          //ISL29125
 // #define MIC
 // #define SRF01      // connection detection does not work
@@ -19,7 +19,7 @@
 // #define GYRO      // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-// #define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -102,8 +102,8 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #ifdef SERVO
-  #define SERVO_SPEED 10
-  #define SERVO_PIN 4
+  #define SERVO_SPEED 5
+  #define SERVO_PIN 4 //D2 SDA
   #include <Servo.h>
 #endif
 
@@ -190,7 +190,7 @@ extern "C"{
 #endif
 
 #ifndef SOCKET
-  #define relay_pin 12 //TH relay with red LED
+  #define relay_pin 12 //TH relay with red LED, D6 on nodeMCU
 #endif
 
 #ifdef SERVO
@@ -383,8 +383,7 @@ PubSubClient client(espClient);
 
 String topic = "";
 String error_topic = "";
-String subscribe_topic_relay = "";
-String subscribe_topic_servo = "";
+String subscribe_topic = "";
 String mDNSname = "";
 String button_topic = "";
 
@@ -443,12 +442,8 @@ boolean reconnect() {
     mqttConnetionsCounter++;
     client.setKeepAlive(MQTT_ALIVE);
     debug("set alive time for "); debug(MQTT_ALIVE); debugln(" secs");
-    client.subscribe(subscribe_topic_relay.c_str());   // resubscribe mqtt
-    #ifdef SERVO
-      client.subscribe(subscribe_topic_servo.c_str());
-      debug("subscribed for topic: "); debugln(subscribe_topic_servo);
-    #endif
-    debug("subscribed for topic: "); debugln(subscribe_topic_relay);
+    client.subscribe(subscribe_topic.c_str());   // resubscribe mqtt
+    debug("subscribed for topic: "); debugln(subscribe_topic);
   }
   return client.connected();
 }
@@ -473,7 +468,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   debugln("- - - - - - - - - - - - -");
   debug("Message arrived in topic: ");
   debugln(topic);
-  debug("Message: ");
+  debug("Message payload: ");
 
   String messageTemp;
   for (int i = 0; i < length; i++) {
@@ -482,60 +477,56 @@ void callback(char* topic, byte* payload, unsigned int length) {
   }
   debugln("");
 
-  //TODO subscribe multiple topics - with strcmp - https://www.baldengineer.com/multiple-mqtt-topics-pubsubclient.html
-  if (String(topic) == subscribe_topic_relay.c_str()){
-    if (messageTemp == "on"){
-      debugln("relay turned ON");
-      digitalWrite(relay_pin, HIGH);
-    } else if (messageTemp == "off"){
-      debugln("relay turned off");
-      digitalWrite(relay_pin, LOW);
+  // check if subscribed for /in
+  if (String(topic) == subscribe_topic.c_str()){
+    StaticJsonDocument<256> doc;
+    deserializeJson(doc, payload, length);
+    // check for specific keys in payload
+    bool hasRelay = doc.containsKey("relay");
+    #ifdef SERVO
+      bool hasPosition = doc.containsKey("sand");
+    #endif
+
+    if (hasRelay){
+      bool relayStatus = doc["relay"];
+      debug("relay turned to: "); debugln(relayStatus);
+      digitalWrite(relay_pin, relayStatus);
     }
-  }
 
   #ifdef SERVO
+      if (hasPosition){
+        int position = doc["sand"];
+        debug("received message position: "); debugln(position);
 
-    // Convert the payload
-    // char format[16];
-    // snprintf(format, sizeof format, "%%%ud", length);
-    // int payload_value = 0;
-    // if (sscanf((const char *) payload, format, &payload_value) == 1)
-    //   Serial.println(payload_value);
-    // else
-    //   ; // Conversion error occurred
+        int new_pos = map(position, 0, 100, 0, 180);
+        debug("new position in deg: "); debugln(new_pos);
+        prev_pos = myservo.read();
+        debug("previous position in deg: "); debugln(prev_pos);
+        if (new_pos < 0) {
+          pos = 0;
+        } else if (new_pos >= 0 && new_pos <= 180){
+          pos = new_pos;
+        } else if (new_pos > 180) {pos = 180;}
+        else {debug("received wrong format servo position: "); debugln(position);}
 
-    if (String(topic) == subscribe_topic_servo.c_str()){
-      int payload_value = atoi((char*)payload);
-      debug("received message position: "); debugln(payload_value);
-      int new_pos = map(payload_value, 0, 100, 0, 180);
-      debug("new position in deg: "); debugln(new_pos);
-      prev_pos = myservo.read();
-      debug("previous position in deg: "); debugln(prev_pos);
-      if (new_pos < 0) {
-        pos = 0;
-      } else if (new_pos >= 0 && new_pos <= 180){
-        pos = new_pos;
-      } else if (new_pos > 180) {pos = 180;}
-      else {debug("received wrong format servo position: "); debugln(payload_value);}
-    }
-
-    debug("moving servo to: "); debugln(pos);
-    if (pos > prev_pos){
-      for (int p = prev_pos; p <= pos; p+=1 ){
-      myservo.write(p);
-      delay(SERVO_SPEED);
-      }
-    } else if (pos < prev_pos){
-      for (int p = prev_pos; p >= pos; p-=1 ){
-      myservo.write(p);
-      delay(SERVO_SPEED);
-      }
-    } else {
-      debugln("position the same, do nothing");
-    }
-    debugln("moving servo completed");
+        debug("moving servo to position: "); debugln(pos);
+        if (pos > prev_pos){
+          for (int p = prev_pos; p <= pos; p+=1 ){
+          myservo.write(p);
+          delay(SERVO_SPEED);
+          }
+        } else if (pos < prev_pos){
+          for (int p = prev_pos; p >= pos; p-=1 ){
+          myservo.write(p);
+          delay(SERVO_SPEED);
+          }
+        } else {
+          debugln("position the same, do nothing");
+        }
+        debugln("moving servo completed");
+      } // end hasPosition if
   #endif
-
+  } // end of if string = sub topic
   debugln("- - - - - - - - - - - - -");
   debugln("");
 }
@@ -594,10 +585,7 @@ debug("Device ID: "); debugln(unit_id);
 
 topic = topicPrefix + sensor_type + "/" + unit_id;
 error_topic = topic + "/error";
-subscribe_topic_relay = topic + "/relay";
-#ifdef SERVO
-  subscribe_topic_servo = topic + "/set";
-#endif
+subscribe_topic = topic + "/in";
 mDNSname = unit_id;
 
 #ifdef BUTTON
@@ -1145,7 +1133,7 @@ if (WiFi.status() == WL_CONNECTED){
       #ifdef SERVO
         if(!error_flag){
           StaticJsonDocument<128> doc;
-          doc["valve position"] = map(myservo.read(), 0, 180, 0, 100);
+          doc["valve_position"] = map(myservo.read(), 0, 180, 0, 100);
           char out[128];
           serializeJson(doc, out);
 
