@@ -3,7 +3,7 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY             // no sensor connected, just send random values
+// #define DUMMY             // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
@@ -14,6 +14,7 @@
 // #define LIGHT            //ISL29125
 // #define MIC
 // #define SRF01            // connection detection does not work
+#define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
 // #define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
@@ -75,7 +76,6 @@ extern "C"{
 #endif
 
 #ifdef GYRO
-  #include <Wire.h>
   #include <Wire.h>
   #include <Adafruit_Sensor.h>
   #include <Adafruit_BNO055.h>
@@ -151,6 +151,10 @@ extern "C"{
   SoftwareSerial srf01 = SoftwareSerial(SRF_TXRX, SRF_TXRX);      // Sets up software serial port for the SRF01
 #endif
 
+#ifdef SRF02
+  #include <Wire.h>
+#endif
+
 #ifdef LIGHT
   #include <Wire.h>
   #include "SparkFunISL29125.h"
@@ -207,7 +211,7 @@ extern "C"{
   Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -370,7 +374,11 @@ PubSubClient client(espClient);
   const String sensor_type = "proximity";
   const String sensor_model = "SRF01";
 #endif
-
+#ifdef SRF02
+  const unsigned long sensorInterval = 500;
+  const String sensor_type = "proximity";
+  const String sensor_model = "SRF02";
+#endif
 
 // form mqtt topic based on template and id
 #if defined (SOCKET)
@@ -403,6 +411,44 @@ String button_topic = "";
     int availbleJunk = srf01.available();               // As RX and TX are the same pin it will have recieved the data we just sent out, as we dont want this we read it back and ignore it as junk before waiting for useful data to arrive
     for(int x = 0;  x < availbleJunk; x++) byte junk = srf01.read();
   }
+#endif
+
+#ifdef SRF02
+    int readDistance(){
+      int reading = 0;
+      // step 1: instruct sensor to read echoes
+      Wire.beginTransmission(112); // transmit to device #112 (0x70)
+      // the address specified in the datasheet is 224 (0xE0)
+      // but i2c adressing uses the high 7 bits so it's 112
+      Wire.write(byte(0x00));      // sets register pointer to the command register (0x00)
+      Wire.write(byte(0x51));      // command sensor to measure in "centimeters" (0x51)
+      // use 0x51 for centimeters
+      // use 0x52 for ping microseconds
+      Wire.endTransmission();      // stop transmitting
+
+      // step 2: wait for readings to happen
+      delay(70);                   // datasheet suggests at least 65 milliseconds
+
+      // step 3: instruct sensor to return a particular echo reading
+      Wire.beginTransmission(112); // transmit to device #112
+      Wire.write(byte(0x02));      // sets register pointer to echo #1 register (0x02)
+      Wire.endTransmission();      // stop transmitting
+
+      // step 4: request reading from sensor
+      Wire.requestFrom(112, 2);    // request 2 bytes from slave device #112
+
+      // step 5: receive reading from sensor
+      if (2 <= Wire.available())   // if two bytes were received
+        {
+          reading = Wire.read();  // receive high byte (overwrites previous reading)
+          reading = reading << 8;    // shift high byte to be high 8 bits
+          reading |= Wire.read(); // receive low byte as lower 8 bits
+          Serial.print(reading);   // print the reading
+          Serial.println("cm");
+          return reading;
+        }
+        return 0;
+    } // end of readDistance
 #endif
 
 int uptimeInSecs(){
@@ -816,6 +862,21 @@ mDNSname = unit_id;
   }
 #endif
 
+#ifdef SRF02
+  Wire.begin(sda_pin, clk_pin);
+  // read test
+  debugln("waiting for serial");
+  delay(5000);
+  debugln("reading distance from srf02");
+  int distance = readDistance();
+  if (isnan(distance)) {
+    debugln("Failed to read from DHT sensor!");
+    error_flag = true;
+  } else {
+    debug("distance = "); debug(distance);
+    error_flag = false;
+  }
+#endif
 
 //------------------------------------------------------------------------------
 
@@ -1286,6 +1347,21 @@ if (WiFi.status() == WL_CONNECTED){
           StaticJsonDocument<128> doc;
           doc["value"] = range;
 
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef SRF02
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["value"] = readDistance();
           char out[128];
           serializeJson(doc, out);
 
