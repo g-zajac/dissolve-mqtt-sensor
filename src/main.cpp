@@ -446,8 +446,7 @@ String button_topic = "";
           Serial.print(reading);   // print the reading
           Serial.println("cm");
           return reading;
-        }
-        return 0;
+        } else return 9999;        // for error detection
     } // end of readDistance
 #endif
 
@@ -869,7 +868,7 @@ mDNSname = unit_id;
   delay(5000);
   debugln("reading distance from srf02");
   int distance = readDistance();
-  if (isnan(distance)) {
+  if (distance == 9999) {
     debugln("Failed to read from DHT sensor!");
     error_flag = true;
   } else {
