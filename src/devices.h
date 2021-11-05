@@ -9,7 +9,7 @@ const device_details devices[] = {
   // ---------------------- PROXIMITY --------------------------
   {0x0065B6C7, "001"},  // proximity TOF1 - VL53L1X - 4m
   {0x00AAA13E, "002"},  // proximity TOF1 - VL52L1X - 4m pololu
-  {0x0065AFD6, "003"},  // proximity TOF0 - VL52L0X - 2m
+  {0x0065AFD6, "003"},  // proximity TOF0 - VL52L0X - 2m - jumps
   {0x0066455C, "004"},  // proximity TOF0 - VL52L0X - 2m
   {0x0066425C, "005"},  // gesture/proximity/colour - RGB 16bit raw values
   {0x0065C28B, "006"},  // proximity ultrasonic SRF01
@@ -29,6 +29,6 @@ const device_details devices[] = {
   {0x006643D4, "019"},
   {0x00664871, "020"},
   {0x0022AD43, "021"},  // Mobile Gyro on battery (Wemos D1)
-  {0x00147593, "031"},  // temporary sand valve
+  {0x0042970A, "031"},  // temporary sand valve
   {0x00, "099"} // blank or dummy default if not defined above
 };
