@@ -102,8 +102,8 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #ifdef SERVO
-  #define SERVO_SPEED 10
-  #define SERVO_PIN 4
+  #define SERVO_SPEED 5
+  #define SERVO_PIN 4 //D2 SDA
   #include <Servo.h>
 #endif
 
@@ -596,7 +596,7 @@ topic = topicPrefix + sensor_type + "/" + unit_id;
 error_topic = topic + "/error";
 subscribe_topic_relay = topic + "/relay";
 #ifdef SERVO
-  subscribe_topic_servo = topic + "/set";
+  subscribe_topic_servo = topic + "/in";
 #endif
 mDNSname = unit_id;
 
