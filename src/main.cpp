@@ -3,23 +3,23 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define DUMMY            // no sensor connected, just send random values
+#define DUMMY             // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA
-// #define RGB     //        // TCS34725
-// #define LIGHT          //ISL29125
+// #define RGB              // TCS34725
+// #define LIGHT            //ISL29125
 // #define MIC
-// #define SRF01      // connection detection does not work
-// #define PROXIMITY // double eye sensor
+// #define SRF01            // connection detection does not work
+// #define PROXIMITY           // HC-SR04 double eye sensor
 // #define WEIGHT
-// #define GYRO      // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
+// #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 
-#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -174,8 +174,8 @@ extern "C"{
 
 #ifdef PROXIMITY
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define trigPin 4 //D2 SDA
-  #define echoPin 14//D5 SCLK
+  #define trigPin 4 //D2 SDA - white
+  #define echoPin 14//D5 SCLK - red
 #endif
 
 #ifdef THERMAL_CAMERA
@@ -296,7 +296,7 @@ PubSubClient client(espClient);
   const String sensor_model = "dummy";
 #endif
 #ifdef PROXIMITY
-  const unsigned long sensorInterval = 3000;
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = "proximity";
   const String sensor_model = "HC-SR04";
 #endif
@@ -459,7 +459,8 @@ boolean reconnect() {
     digitalWrite(trigPin, LOW);
 
     float duration = pulseIn(echoPin, HIGH);
-    float distance = (duration*.0343)/2;
+    float distance_float = (duration*.0343)/2;
+    int distance = int(distance_float);
     return distance;
   }
 #endif
