@@ -21,8 +21,8 @@
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
 // #define AIR                 // CCS811 gas sensor
-#define DUST                 // nodeMCU platform
-// #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define DUST                 // nodeMCU platform
+#define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
@@ -104,7 +104,7 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #ifdef SERVO
-  #define SERVO_SPEED 5
+  #define SERVO_SPEED 1
   #define SERVO_PIN 4 //D2 SDA
   #include <Servo.h>
 #endif
@@ -434,7 +434,7 @@ PubSubClient client(espClient);
 #endif
 #ifdef DUST
   const unsigned long sensorInterval = 3000;
-  const String sensor_type = "DUST";
+  const String sensor_type = "dust";
   const String sensor_model = "dust";
 #endif
 
@@ -614,6 +614,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
         else {debug("received wrong format servo position: "); debugln(position);}
 
         debug("moving servo to position: "); debugln(pos);
+        // FAST
+        // myservo.write(pos);
+
+        // SLOW
         if (pos > prev_pos){
           for (int p = prev_pos; p <= pos; p+=1 ){
           myservo.write(p);
