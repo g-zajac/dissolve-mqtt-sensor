@@ -945,22 +945,18 @@ mDNSname = unit_id;
   bool ok= ccs811.begin();
   if( !ok ){
    debugln("Failed to start sensor!");
-   // error_flag = true;
+   error_flag = true;
  } else {
    error_flag = false;
  }
- delay(3000);
-
  // Print CCS811 versions
-   Serial.print("setup: hardware    version: "); Serial.println(ccs811.hardware_version(),HEX);
-   Serial.print("setup: bootloader  version: "); Serial.println(ccs811.bootloader_version(),HEX);
-   Serial.print("setup: application version: "); Serial.println(ccs811.application_version(),HEX);
+   // Serial.print("setup: hardware    version: "); Serial.println(ccs811.hardware_version(),HEX);
+   // Serial.print("setup: bootloader  version: "); Serial.println(ccs811.bootloader_version(),HEX);
+   // Serial.print("setup: application version: "); Serial.println(ccs811.application_version(),HEX);
 
    ok= ccs811.start(CCS811_MODE_1SEC);
-   // if( !ok ) {error_flag = true;}
+   if( !ok ) {error_flag = true;}
    debug("ccs811 start flag = "); debugln(ok);
-
-   error_flag = false;  //tmp force
 #endif
 
 //------------------------------------------------------------------------------
@@ -1527,12 +1523,14 @@ if (WiFi.status() == WL_CONNECTED){
               doc["CO2"] = eco2;
               doc["TVOC"] = etvoc;
             } else if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
-              Serial.println("CCS811: waiting for (new) data");
+              debugln("CCS811: waiting for (new) data");
             } else if( errstat & CCS811_ERRSTAT_I2CFAIL ) {
-              Serial.println("CCS811: I2C error");
+              debugln("CCS811: I2C error");
             } else {
+              #if SERIAL_DEBUG == 1
               Serial.print("CCS811: errstat="); Serial.print(errstat,HEX);
               Serial.print("="); Serial.println( ccs811.errstat_str(errstat) );
+              #endif
             }
 
             char out[128];
@@ -1554,6 +1552,8 @@ if (WiFi.status() == WL_CONNECTED){
       // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
   }
+
+//------------------------------------------------------------------------------
 
   #ifdef MQTT_REPORT
     unsigned long reportDiff = millis() - previousReportTime;
