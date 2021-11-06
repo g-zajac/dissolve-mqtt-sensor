@@ -20,7 +20,8 @@
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
-#define AIR                 // CCS811 gas sensor
+// #define AIR                 // CCS811 gas sensor
+#define DUST
 // #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
@@ -248,6 +249,10 @@ extern "C"{
   #define clk_pin 14//D5 SCLK - red
 #endif
 
+#ifdef DUST
+  int pin = 14;
+#endif
+
 //------------------------------- VARs declarations ----------------------------
 bool error_flag = false;
 boolean rc; // mqtt sending response flag, true - eroor sending, flase ok
@@ -317,6 +322,16 @@ PubSubClient client(espClient);
 
 #ifdef AIR
   uint16_t eco2, etvoc, errstat, raw;
+#endif
+
+#ifdef DUST
+  unsigned long duration;
+  unsigned long starttime;
+  unsigned long sampletime_ms = 30000;//sampe 30s ;
+  unsigned long lowpulseoccupancy = 0;
+  unsigned long lowpulseoccupancyMQTT = 0;
+  float ratio = 0;
+  float concentration = 0;
 #endif
 
 //------------------------------------------------------------------------------
@@ -416,6 +431,11 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 3000;
   const String sensor_type = "air";
   const String sensor_model = "CCS811";
+#endif
+#ifdef DUST
+  const unsigned long sensorInterval = 3000;
+  const String sensor_type = "DUST";
+  const String sensor_model = "dust";
 #endif
 
 // form mqtt topic based on template and id
@@ -959,6 +979,11 @@ mDNSname = unit_id;
    debug("ccs811 start flag = "); debugln(ok);
 #endif
 
+#ifdef DUST
+  pinMode(pin,INPUT);
+  starttime = millis();//get the current time;
+  error_flag = false;
+#endif
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -1077,6 +1102,25 @@ if (WiFi.status() == WL_CONNECTED){
           finger = 0;
         } else finger = 1;
 
+  #endif
+
+  #ifdef DUST
+  duration = pulseIn(pin, LOW);
+  lowpulseoccupancy = lowpulseoccupancy+duration;
+
+  if ((millis()-starttime) > sampletime_ms)//if the sampel time == 30s
+  {
+      ratio = lowpulseoccupancy/(sampletime_ms*10.0);  // Integer percentage 0=>100
+      concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62; // using spec sheet curve
+      Serial.print(lowpulseoccupancy);
+      Serial.print(",");
+      Serial.print(ratio);
+      Serial.print(",");
+      Serial.println(concentration);
+      lowpulseoccupancyMQTT = lowpulseoccupancy;
+      lowpulseoccupancy = 0;
+      starttime = millis();
+  }
   #endif
 
 
@@ -1547,6 +1591,24 @@ if (WiFi.status() == WL_CONNECTED){
         }
         else debugln("MQTT data send successfully");
       #endif
+
+      #ifdef DUST
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["Lowpulseoccupancy"] = lowpulseoccupancyMQTT;
+          doc["ratio"] = ratio;
+          doc["concentratin"] = concentration;
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
 
       previousSensorTime = millis();
       // block_report = false;
