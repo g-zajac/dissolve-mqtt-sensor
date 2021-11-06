@@ -27,8 +27,9 @@ const device_details devices[] = {
   {0x006648F3, "017"},  // -- Humidity
   {0x00664552, "018"},  // -- Humidity
   {0x006643D4, "019"},  // -- air quality
-  {0x00664871, "020"},  // -- dust sensor
+  {0x00664871, "020"},  //
   {0x0022AD43, "021"},  // Mobile Gyro on battery (Wemos D1)
-  {0x0042970A, "031"},  // temporary sand valve
+  {0x00D52499, "022"},  // Dust sensor
+  {0x0042970A, "031"},  // Sand valve - prototype
   {0x00, "099"} // blank or dummy default if not defined above
 };
