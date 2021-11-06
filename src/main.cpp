@@ -14,12 +14,12 @@
 // #define LIGHT            //ISL29125
 // #define MIC
 // #define SRF01            // connection detection does not work
-#define SRF02
+// #define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
 // #define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
-
+#define HR                  // heart rate on MAX30102
 // #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
@@ -162,6 +162,13 @@ extern "C"{
   SFE_ISL29125 RGB_sensor;
 #endif
 
+#ifdef HR
+  #include <Wire.h>
+  #include "MAX30105.h"
+  #include "heartRate.h"
+  MAX30105 particleSensor;
+#endif
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #ifndef GYRO
   #define sonoff_led_blue 13
@@ -211,7 +218,7 @@ extern "C"{
   Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02) || defined(HR)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -289,6 +296,16 @@ PubSubClient client(espClient);
 #ifdef DHT
   float h = 0;
   float t =0;
+#endif
+
+#ifdef HR
+  const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
+  byte rates[RATE_SIZE]; //Array of heart rates
+  byte rateSpot = 0;
+  long lastBeat = 0; //Time at which the last beat occurred
+  float beatsPerMinute;
+  int beatAvg;
+  bool finger;
 #endif
 
 //------------------------------------------------------------------------------
@@ -378,6 +395,11 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 500;
   const String sensor_type = "proximity";
   const String sensor_model = "SRF02";
+#endif
+#ifdef HR
+  const unsigned long sensorInterval = 2000;
+  const String sensor_type = "heart";
+  const String sensor_model = "MAX30102";
 #endif
 
 // form mqtt topic based on template and id
@@ -877,6 +899,29 @@ mDNSname = unit_id;
   }
 #endif
 
+#ifdef HR
+  Wire.begin(sda_pin, clk_pin);
+  // Initialize sensor
+  if (particleSensor.begin(Wire, I2C_SPEED_FAST) == false) //Use default I2C port, 400kHz speed
+  {
+    debugln("MAX30105 was not found.");
+    error_flag = true;
+  } else {
+    byte ledBrightness = 70; //Options: 0=Off to 255=50mA
+    byte sampleAverage = 1; //Options: 1, 2, 4, 8, 16, 32
+    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+    int sampleRate = 400; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+    int pulseWidth = 69; //Options: 69, 118, 215, 411
+    int adcRange = 16384; //Options: 2048, 4096, 8192, 16384
+    // particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
+
+    particleSensor.setup(); //Configure sensor with default settings
+    particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+    particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    error_flag = false;
+  }
+#endif
+
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -966,6 +1011,35 @@ if (WiFi.status() == WL_CONNECTED){
       APDS.readColor(r, g, b);
       }
   }
+  #endif
+
+  #ifdef HR
+    long irValue = particleSensor.getIR();
+      if (checkForBeat(irValue) == true)
+        {
+          //We sensed a beat!
+          long delta = millis() - lastBeat;
+          lastBeat = millis();
+
+          beatsPerMinute = 60 / (delta / 1000.0);
+
+          if (beatsPerMinute < 255 && beatsPerMinute > 20)
+          {
+            rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+            rateSpot %= RATE_SIZE; //Wrap variable
+
+            //Take average of readings
+            beatAvg = 0;
+            for (byte x = 0 ; x < RATE_SIZE ; x++)
+              beatAvg += rates[x];
+              beatAvg /= RATE_SIZE;
+            }
+        }
+
+        if (irValue < 5000){
+          finger = 0;
+        } else finger = 1;
+
   #endif
 
 
@@ -1372,6 +1446,37 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef HR
+        if (!error_flag){
+          particleSensor.check(); //Check the sensor
+           if (particleSensor.available()) {
+              // read stored IR
+              Serial.print(particleSensor.getFIFOIR());
+              Serial.print(",");
+              // read stored red
+              Serial.println(particleSensor.getFIFORed());
+              // read next set of samples
+              particleSensor.nextSample();
+          } // end of if particle sensor avaliable
+
+          StaticJsonDocument<128> doc;
+          doc["HR"] = beatsPerMinute;
+          doc["AvgHR"] = beatAvg;
+          doc["finger"] = finger;
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+          } else {
+            rc = client.publish(error_topic_char, "sensor not found");
+            debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+          }
+          if (!rc) {
+            debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+            digitalWrite(sonoff_led_blue, LOW);
+          }
+          else debugln("MQTT data send successfully");
+      #endif
 
       previousSensorTime = millis();
       // block_report = false;
