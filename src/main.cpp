@@ -21,7 +21,7 @@
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
 // #define AIR                 // CCS811 gas sensor
-#define DUST
+#define DUST                 // nodeMCU platform
 // #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
@@ -1112,11 +1112,6 @@ if (WiFi.status() == WL_CONNECTED){
   {
       ratio = lowpulseoccupancy/(sampletime_ms*10.0);  // Integer percentage 0=>100
       concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62; // using spec sheet curve
-      Serial.print(lowpulseoccupancy);
-      Serial.print(",");
-      Serial.print(ratio);
-      Serial.print(",");
-      Serial.println(concentration);
       lowpulseoccupancyMQTT = lowpulseoccupancy;
       lowpulseoccupancy = 0;
       starttime = millis();
@@ -1598,6 +1593,7 @@ if (WiFi.status() == WL_CONNECTED){
           doc["Lowpulseoccupancy"] = lowpulseoccupancyMQTT;
           doc["ratio"] = ratio;
           doc["concentratin"] = concentration;
+          doc["timer30s"] = 30 - ((millis()-starttime) / 1000);
           char out[128];
           serializeJson(doc, out);
 
