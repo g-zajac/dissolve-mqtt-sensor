@@ -19,7 +19,8 @@
 // #define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
-#define HR                  // heart rate on MAX30102
+// #define HR                  // heart rate on MAX30102
+#define AIR                 // CCS811 gas sensor
 // #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
 
 //------------------------------------------------------------------------------
@@ -169,6 +170,12 @@ extern "C"{
   MAX30105 particleSensor;
 #endif
 
+#ifdef AIR
+  #include <Wire.h>
+  #include "ccs811.h"
+  CCS811 ccs811;
+#endif
+
 //--------------------------------- PIN CONFIG ---------------------------------
 #ifndef GYRO
   #define sonoff_led_blue 13
@@ -218,7 +225,7 @@ extern "C"{
   Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02) || defined(HR)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02) || defined(HR) || defined(AIR)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -306,6 +313,10 @@ PubSubClient client(espClient);
   float beatsPerMinute;
   int beatAvg;
   bool finger;
+#endif
+
+#ifdef AIR
+  uint16_t eco2, etvoc, errstat, raw;
 #endif
 
 //------------------------------------------------------------------------------
@@ -400,6 +411,11 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 2000;
   const String sensor_type = "heart";
   const String sensor_model = "MAX30102";
+#endif
+#ifdef AIR
+  const unsigned long sensorInterval = 3000;
+  const String sensor_type = "air";
+  const String sensor_model = "CCS811";
 #endif
 
 // form mqtt topic based on template and id
@@ -920,6 +936,31 @@ mDNSname = unit_id;
     particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
     error_flag = false;
   }
+#endif
+
+#ifdef AIR
+  Wire.begin(sda_pin, clk_pin);
+  ccs811.set_i2cdelay(50);
+
+  bool ok= ccs811.begin();
+  if( !ok ){
+   debugln("Failed to start sensor!");
+   // error_flag = true;
+ } else {
+   error_flag = false;
+ }
+ delay(3000);
+
+ // Print CCS811 versions
+   Serial.print("setup: hardware    version: "); Serial.println(ccs811.hardware_version(),HEX);
+   Serial.print("setup: bootloader  version: "); Serial.println(ccs811.bootloader_version(),HEX);
+   Serial.print("setup: application version: "); Serial.println(ccs811.application_version(),HEX);
+
+   ok= ccs811.start(CCS811_MODE_1SEC);
+   // if( !ok ) {error_flag = true;}
+   debug("ccs811 start flag = "); debugln(ok);
+
+   error_flag = false;  //tmp force
 #endif
 
 //------------------------------------------------------------------------------
@@ -1476,6 +1517,37 @@ if (WiFi.status() == WL_CONNECTED){
             digitalWrite(sonoff_led_blue, LOW);
           }
           else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef AIR
+        if (!error_flag){
+          StaticJsonDocument<128> doc;
+          ccs811.read(&eco2,&etvoc,&errstat,&raw);
+            if( errstat==CCS811_ERRSTAT_OK ) {
+              doc["CO2"] = eco2;
+              doc["TVOC"] = etvoc;
+            } else if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
+              Serial.println("CCS811: waiting for (new) data");
+            } else if( errstat & CCS811_ERRSTAT_I2CFAIL ) {
+              Serial.println("CCS811: I2C error");
+            } else {
+              Serial.print("CCS811: errstat="); Serial.print(errstat,HEX);
+              Serial.print("="); Serial.println( ccs811.errstat_str(errstat) );
+            }
+
+            char out[128];
+            serializeJson(doc, out);
+            rc = client.publish(data_topic_char, out);
+
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
       #endif
 
       previousSensorTime = millis();
