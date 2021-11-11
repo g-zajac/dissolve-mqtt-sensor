@@ -10,7 +10,7 @@
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA_LO //
-// #define THERMAL_CAMERA_HI   // MLX90640
+#define THERMAL_CAMERA_HI   // MLX90640 - ESP32!!!
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
 // #define MIC
@@ -24,7 +24,7 @@
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
 // #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -111,7 +111,7 @@ extern "C"{
 // SOCKET does not have any sensor
 
 #if defined(SAND) || defined(WATER)
-  #define SERVO_SPEED 1
+  #define SERVO_SPEED 10
   #define SERVO_PIN 4 //D2 SDA
   #include <Servo.h>
 #endif
