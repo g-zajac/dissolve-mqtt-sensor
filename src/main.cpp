@@ -10,7 +10,7 @@
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA_LO //
-#define THERMAL_CAMERA_HI   // MLX90640
+// #define THERMAL_CAMERA_HI   // MLX90640
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
 // #define MIC
@@ -23,8 +23,8 @@
 // #define HR                  // heart rate on MAX30102
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
-// #define SERVO            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-
+// #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -110,7 +110,7 @@ extern "C"{
 
 // SOCKET does not have any sensor
 
-#ifdef SERVO
+#if defined(SAND) || defined(WATER)
   #define SERVO_SPEED 1
   #define SERVO_PIN 4 //D2 SDA
   #include <Servo.h>
@@ -225,7 +225,7 @@ extern "C"{
   #define relay_pin 12 //TH relay with red LED, D6 on nodeMCU
 #endif
 
-#ifdef SERVO
+#if defined(SAND) || defined(WATER)
   Servo myservo;
 #endif
 
@@ -291,7 +291,7 @@ PubSubClient client(espClient);
   long t;
 #endif
 
-#ifdef SERVO
+#if defined(SAND) || defined(WATER)
   #define sonoff_led_blue 2 // build in LED on chip
   int prev_pos = 0;
   int pos = 0; // variable to store the servo position
@@ -357,6 +357,18 @@ PubSubClient client(espClient);
   //char mlx90640To[768];
 #endif
 
+#ifdef SAND
+  // calibrated manualy 0-90 deg
+  int servo_pulse_min = 900;  // 800
+  int servo_pulse_max = 2000; // 2000
+#endif
+
+#ifdef WATER
+  // calibrated manualy, max turn 0-270
+  int servo_pulse_min = 500;  // 500
+  int servo_pulse_max = 2500; // 2500
+#endif
+
 //------------------------------------------------------------------------------
 // TODO move to lib, external object?
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -395,10 +407,15 @@ PubSubClient client(espClient);
   const String sensor_type = "socket";
   const String sensor_model = "sonoff socket";
 #endif
-#ifdef SERVO
+#ifdef SAND
   const unsigned long sensorInterval = 1000;
   const String sensor_type = "sand";
   const String sensor_model = "MG996R";
+#endif
+#ifdef WATER
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = "water";
+  const String sensor_model = "MS24";
 #endif
 #ifdef GESTURE
   const unsigned long sensorInterval = 500;
@@ -469,7 +486,7 @@ PubSubClient client(espClient);
 // form mqtt topic based on template and id
 #if defined (SOCKET)
   String topicPrefix = MQTT_SUB_TOPIC_SOCKET;
-#elif defined (SERVO)
+#elif defined (SAND) || defined (WATER)
   String topicPrefix = MQTT_SUB_TOPIC_SERVO;
 #else
   String topicPrefix = MQTT_TOPIC;
@@ -626,8 +643,11 @@ void callback(char* topic, byte* payload, unsigned int length) {
     deserializeJson(doc, payload, length);
     // check for specific keys in payload
     bool hasRelay = doc.containsKey("relay");
-    #ifdef SERVO
+    #ifdef SAND
       bool hasPosition = doc.containsKey("sand");
+    #endif
+    #ifdef WATER
+      bool hasPosition = doc.containsKey("water");
     #endif
 
     if (hasRelay){
@@ -636,11 +656,15 @@ void callback(char* topic, byte* payload, unsigned int length) {
       digitalWrite(relay_pin, relayStatus);
     }
 
-  #ifdef SERVO
+  #if defined(SAND) || defined(WATER)
       if (hasPosition){
-        int position = doc["sand"];
+        #ifdef SAND
+          int position = doc["sand"];
+        #endif
+        #ifdef WATER
+          int position = doc["water"];
+        #endif
         debug("received message position: "); debugln(position);
-
         int new_pos = map(position, 0, 100, 0, 180);
         debug("new position in deg: "); debugln(new_pos);
         prev_pos = myservo.read();
@@ -853,8 +877,9 @@ mDNSname = unit_id;
   digitalWrite(relay_pin, LOW); // default off
 #endif
 
-#ifdef SERVO
-  myservo.attach(SERVO_PIN);
+#if defined(SAND) || defined(WATER)
+  // myservo.attach(SERVO_PIN);
+  myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
   delay(20);
   myservo.write(180);             // close by default
   debug("servo @ position: "); debugln(pos);
@@ -1469,7 +1494,7 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef SERVO
+      #if defined(SAND) || defined(WATER)
         if(!error_flag){
           StaticJsonDocument<128> doc;
           doc["valve_position"] = map(myservo.read(), 0, 180, 0, 100);
