@@ -17,7 +17,7 @@ const device_details devices[] = {
   {0x00A97FCC, "008"},  // -- proximity, ultrasonic HC-SR04
   {0x0065EAC7, "009"},  //
   // ---------------------- OTHERS -----------------------------
-  {0x00666608, "010"},  // -- HR
+  {0x00666608, "010"},  // HR
   {0x0066460B, "011"},  // Thermal camera
   {0x00A8F31B, "012"},  // RGB - light - TCS34725
   {0x00664624, "013"},  // Mic
