@@ -30,7 +30,7 @@ const device_details devices[] = {
   {0x00664871, "020"},  // -- weight 4x50kg
   {0x0022AD43, "021"},  // Mobile Gyro on battery (Wemos D1)
   {0x00D52499, "022"},  // Dust sensor
-  {0x00AAAAAA, "023"},   // Thermal camera Hi-Res 
+  {0x00AAAAAA, "023"},   // Thermal camera Hi-Res  (ESP32) separate code
   {0x0042970A, "031"},  // Sand valve - prototype
   {0x00D5B7A1, "032"},  // Sand valve 2
   {0x00D5A22A, "033"},  // Water valve 1
