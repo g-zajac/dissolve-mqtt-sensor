@@ -17,14 +17,14 @@
 // #define SRF01            // connection detection does not work
 // #define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
-// #define WEIGHT
+#define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
 // #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -75,6 +75,7 @@ extern "C"{
 #endif
 
 #ifdef WEIGHT
+  // #include <HX711.h>
   #include <HX711_ADC.h>
 #endif
 
@@ -287,8 +288,9 @@ WiFiEventHandler wifiDisconnectHandler;
 PubSubClient client(espClient);
 
 #ifdef WEIGHT
+  // HX711 scale;
   HX711_ADC LoadCell(sda_pin, clk_pin);
-  long t;
+  unsigned long t = 0;
 #endif
 
 #if defined(SAND) || defined(WATER)
@@ -775,19 +777,35 @@ mDNSname = unit_id;
 #endif
 
 #ifdef WEIGHT
-  float calValue = 696;             // calibration value, depends on your individual load cell setup
-  LoadCell.begin();                 // start connection to load cell module
+  // scale.begin(sda_pin, clk_pin);
+  // scale.set_scale();
+  // scale.set_scale(300.f);  //2280
+  // scale.tare();
 
-  LoadCell.start(2000);
-  if (LoadCell.getTareTimeoutFlag()) {
+  // if (scale.wait_ready_timeout(1000)){
+  //   error_flag = false;
+  //   debugln("HX711 startup is complete");
+  // } else {
+  //   debugln("Timeout, check MCU>HX711 wiring and pin designations");
+  //   error_flag = true;
+  // }
+
+  LoadCell.begin();
+
+  unsigned long stabilizingtime = 2000; // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
+  boolean _tare = true; //set this to false if you don't want tare to be performed in the next step
+  LoadCell.start(stabilizingtime, _tare);
+  if (LoadCell.getTareTimeoutFlag() || LoadCell.getSignalTimeoutFlag()) {
     debugln("Timeout, check MCU>HX711 wiring and pin designations");
     error_flag = true;
   }
   else {
-    LoadCell.setCalFactor(calValue); // set calibration factor (float)
-    Serial.println("HX711 startup is complete");
+    LoadCell.setCalFactor(-1000); // user set calibration value (float), initial value 1.0 may be used for this sketch
+    LoadCell.tareNoDelay();
+    debugln("Startup is complete");
     error_flag = false;
   }
+
 #endif
 
 #ifdef GYRO
@@ -1150,10 +1168,6 @@ if (WiFi.status() == WL_CONNECTED){
     webota.handle();
   #endif
 
-  #ifdef WEIGHT
-    if (!error_flag) LoadCell.update();
-  #endif
-
   #ifdef GYRO
     //
   #endif
@@ -1220,6 +1234,10 @@ if (WiFi.status() == WL_CONNECTED){
   }
   #endif
 
+  #ifdef WEIGHT
+    static boolean newDataReady = 0;
+    if (LoadCell.update()) newDataReady = true;
+  #endif
 
   unsigned long sensorDiff = millis() - previousSensorTime;
     if((sensorDiff > sensorInterval) && client.connected()) {
@@ -1248,11 +1266,18 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef WEIGHT
         if (!error_flag){
+          StaticJsonDocument<128> doc;
 
-        StaticJsonDocument<128> doc;
-        doc["value"] = LoadCell.getData();
-        doc["calibration"] = LoadCell.getData();
-        doc["setling"] =LoadCell.getSettlingTime();
+          // unsigned long weight = scale.get_units();
+          // unsigned long weight_average = scale.get_units(10);
+          // unsigned long weight_raw = scale.read();
+          // doc["value"] = weight;
+          // doc["average10"] = weight_average;
+          // doc["raw"] = weight_raw;
+
+          doc["value"] = LoadCell.getData();
+          doc["tare_status"] = LoadCell.getTareStatus();
+
 
         char out[128];
         serializeJson(doc, out);
