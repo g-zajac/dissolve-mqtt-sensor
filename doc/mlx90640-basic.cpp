@@ -1,55 +1,85 @@
-#include <ArduinoJson.h>
+
 #include <Wire.h>
 #include "FS.h"
 #include <WiFi.h>
+#include <SPI.h>
+
+#include "MLX90640_API.h"
+#include "MLX90640_I2C_Driver.h"
+
+const byte MLX90640_address = 0x33; //Default 7-bit unshifted address of the MLX90640
+
+#define TA_SHIFT 8 //Default shift for MLX90640 in open air
+
+float mlx90640To[768];
+paramsMLX90640 mlx90640;
+
+//Returns true if the MLX90640 is detected on the I2C bus
+boolean isConnected()
+{
+  Wire.beginTransmission((uint8_t)MLX90640_address);
+  if (Wire.endTransmission() != 0)
+    return (false); //Sensor did not ACK
+  return (true);
+}
 
 void setup()
 {
   Wire.begin(21,22);
+  Wire.setClock(400000); //Increase I2C clock speed to 400kHz
 
-  Serial.begin(9600);
-  Serial.println("\nI2C Scanner");
+  Serial.begin(115200); //Fast serial as possible
+
+  while (!Serial); //Wait for user to open terminal
+  //Serial.println("MLX90640 IR Array Example");
+
+  if (isConnected() == false)
+  {
+    Serial.println("MLX90640 not detected at default I2C address. Please check wiring. Freezing.");
+    while (1);
+  }
+
+  //Get device parameters - We only have to do this once
+  int status;
+  uint16_t eeMLX90640[832];
+  status = MLX90640_DumpEE(MLX90640_address, eeMLX90640);
+  if (status != 0)
+    Serial.println("Failed to load system parameters");
+
+  status = MLX90640_ExtractParameters(eeMLX90640, &mlx90640);
+  if (status != 0)
+    Serial.println("Parameter extraction failed");
+
+  //Once params are extracted, we can release eeMLX90640 array
+
+  //MLX90640_SetRefreshRate(MLX90640_address, 0x02); //Set rate to 2Hz
+  MLX90640_SetRefreshRate(MLX90640_address, 0x03); //Set rate to 4Hz
+  //MLX90640_SetRefreshRate(MLX90640_address, 0x07); //Set rate to 64Hz
 }
-
 
 void loop()
 {
-  byte error, address;
-  int nDevices;
-
-  Serial.println("Scanning...");
-
-  nDevices = 0;
-  for(address = 1; address < 127; address++ )
+  long startTime = millis();
+  for (byte x = 0 ; x < 2 ; x++)
   {
-    // The i2c_scanner uses the return value of
-    // the Write.endTransmisstion to see if
-    // a device did acknowledge to the address.
-    Wire.beginTransmission(address);
-    error = Wire.endTransmission();
+    uint16_t mlx90640Frame[834];
+    int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame);
 
-    if (error == 0)
-    {
-      Serial.print("I2C device found at address 0x");
-      if (address<16)
-        Serial.print("0");
-      Serial.print(address,HEX);
-      Serial.println("  !");
+    float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
+    float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
 
-      nDevices++;
-    }
-    else if (error==4)
-    {
-      Serial.print("Unknow error at address 0x");
-      if (address<16)
-        Serial.print("0");
-      Serial.println(address,HEX);
-    }
+    float tr = Ta - TA_SHIFT; //Reflected temperature based on the sensor ambient temperature
+    float emissivity = 0.95;
+
+    MLX90640_CalculateTo(mlx90640Frame, &mlx90640, emissivity, tr, mlx90640To);
   }
-  if (nDevices == 0)
-    Serial.println("No I2C devices found\n");
-  else
-    Serial.println("done\n");
+  long stopTime = millis();
 
-  delay(5000);           // wait 5 seconds for next scan
+  for (int x = 0 ; x < 768 ; x++)
+  {
+    //if(x % 8 == 0) Serial.println();
+    Serial.print(mlx90640To[x], 2);
+    Serial.print(",");
+  }
+  Serial.println("");
 }
