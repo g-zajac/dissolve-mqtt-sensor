@@ -10,7 +10,7 @@
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA_LO //
-#define THERMAL_CAMERA_HI   // MLX90640 - ESP32!!!
+// #define THERMAL_CAMERA_HI   // MLX90640 - ESP32!!!
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
 // #define MIC
@@ -24,7 +24,7 @@
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
 // #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -664,6 +664,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
         #ifdef WATER
           int position = doc["water"];
         #endif
+        // myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
         debug("received message position: "); debugln(position);
         int new_pos = map(position, 0, 100, 0, 180);
         debug("new position in deg: "); debugln(new_pos);
@@ -695,7 +696,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
           debugln("position the same, do nothing");
         }
         debugln("moving servo completed");
+        // myservo.detach();
       } // end hasPosition if
+
   #endif
   } // end of if string = sub topic
   debugln("- - - - - - - - - - - - -");
@@ -1496,8 +1499,10 @@ if (WiFi.status() == WL_CONNECTED){
 
       #if defined(SAND) || defined(WATER)
         if(!error_flag){
+          // myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
           StaticJsonDocument<128> doc;
           doc["valve_position"] = map(myservo.read(), 0, 180, 0, 100);
+          // myservo.detach();
           char out[128];
           serializeJson(doc, out);
 
