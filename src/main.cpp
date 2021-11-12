@@ -3,7 +3,7 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-#define DUMMY             // no sensor connected, just send random values
+// #define DUMMY             // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
@@ -23,7 +23,7 @@
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
 // #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
+#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -107,6 +107,7 @@ extern "C"{
 #if defined(SAND) || defined(WATER)
   #define SERVO_SPEED 10
   #define SERVO_PIN 4 //D2 SDA
+  #define ONBOARD_LED 16
   #include <Servo.h>
 #endif
 
@@ -205,17 +206,17 @@ extern "C"{
 #endif
 
 // NOTE different pin on socket? TH? to check
-#ifdef SOCKET
-  #define relay_pin 12 //figure out socket relay pin
-#endif
+// #ifdef SOCKET
+//   #define relay_pin 12 //figure out socket relay pin
+// #endif
 
-#ifndef SOCKET
+#if defined (SAND) || defined (WATER)
+  Servo myservo;
+  #define relay_pin 16  // led on board, stop glowing
+#else
   #define relay_pin 12 //TH relay with red LED, D6 on nodeMCU
 #endif
 
-#if defined(SAND) || defined(WATER)
-  Servo myservo;
-#endif
 
 #ifdef GYRO
   // Wemos D1 different I2C pins!!!
@@ -373,7 +374,7 @@ PubSubClient client(espClient);
 #endif
 #ifdef THERMAL_CAMERA_LO
   const unsigned long sensorInterval = 500;
-  const String sensor_type = "THERMAL_CAMERA_LO";
+  const String sensor_type = "thermal_camera";
   const String sensor_model = "AMG8833";
 #endif
 #ifdef SOCKET
@@ -615,8 +616,12 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
     if (hasRelay){
       bool relayStatus = doc["relay"];
-      debug("relay turned to: "); debugln(relayStatus);
-      digitalWrite(relay_pin, relayStatus);
+      debug("relay on pin: "); debug(relay_pin); debug("turned to: "); debugln(relayStatus);
+      #if defined(SAND) || defined(WATER)
+        digitalWrite(relay_pin, !relayStatus);  // led on on LOW
+      #else
+        digitalWrite(relay_pin, relayStatus);
+      #endif
     }
 
   #if defined(SAND) || defined(WATER)
@@ -829,6 +834,7 @@ mDNSname = unit_id;
 #endif
 
 #if defined(SAND) || defined(WATER)
+  digitalWrite(relay_pin, HIGH); // default off
   // myservo.attach(SERVO_PIN);
   myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
   delay(20);
