@@ -3,21 +3,20 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define DUMMY             // no sensor connected, just send random values
+#define DUMMY             // no sensor connected, just send random values
 // #define TOF0
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
 // #define THERMAL_CAMERA_LO //
-// #define THERMAL_CAMERA_HI   // MLX90640 - ESP32!!!
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
 // #define MIC
 // #define SRF01            // connection detection does not work
 // #define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
-#define WEIGHT
+// #define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
@@ -55,12 +54,12 @@
 // "" - the same folder <> lib folder
 // #include "sensor_functions.h"
 // TestLib test(true);
-
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 extern "C"{
- #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
+    #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
 }
+
 #include "credentials.h"
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
@@ -87,14 +86,8 @@ extern "C"{
 #endif
 
 #ifdef THERMAL_CAMERA_LO
-  #include <Adafruit_AMG88xx.h>
   #include <Wire.h>
   #include <SPI.h>
-  Adafruit_AMG88xx amg;
-#endif
-
-#ifdef THERMAL_CAMERA_HI
-  #include <Wire.h>
   #include "MLX90640_API.h"
   #include "MLX90640_I2C_Driver.h"
 #endif
@@ -209,12 +202,6 @@ extern "C"{
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
-#endif
-
-#ifdef THERMAL_CAMERA_HI
-  #define sda_pin 4 //D2 SDA - white
-  #define clk_pin 14//D5 SCLK - red
-  paramsMLX90640 mlx90640;
 #endif
 
 // NOTE different pin on socket? TH? to check
@@ -349,16 +336,6 @@ PubSubClient client(espClient);
   float concentration = 0;
 #endif
 
-#ifdef THERMAL_CAMERA_HI
-  #define row 24
-  #define clom 32
-  #define pixel 768
-  const byte MLX90640_address = 0x33; //Default 7-bit unshifted address of the MLX90640
-  #define TA_SHIFT 8 //Default shift for MLX90640 in open air
-  float mlx90640To[768];
-  //char mlx90640To[768];
-#endif
-
 #ifdef SAND
   // calibrated manualy 0-90 deg
   int servo_pulse_min = 900;  // 800
@@ -398,11 +375,6 @@ PubSubClient client(espClient);
   const unsigned long sensorInterval = 500;
   const String sensor_type = "THERMAL_CAMERA_LO";
   const String sensor_model = "AMG8833";
-#endif
-#ifdef THERMAL_CAMERA_HI
-  const unsigned long sensorInterval = 1000;
-  const String sensor_type = "THERMAL_CAMERA_HI";
-  const String sensor_model = "MLX90640";
 #endif
 #ifdef SOCKET
   const unsigned long sensorInterval = 1000;
@@ -553,17 +525,6 @@ String button_topic = "";
           return reading;
         } else return 9999;        // for error detection
     } // end of readDistance
-#endif
-
-//Returns true if the MLX90640 is detected on the I2C bus
-#ifdef THERMAL_CAMERA_HI
-  boolean isConnected()
-  {
-  Wire.beginTransmission((uint8_t)MLX90640_address);
-  if (Wire.endTransmission() != 0)
-    return (false); //Sensor did not ACK
-  return (true);
-  }
 #endif
 
 int uptimeInSecs(){
@@ -829,37 +790,6 @@ mDNSname = unit_id;
       debugln("Could not find a valid AMG88xx sensor, check wiring!");
       error_flag = true;
   } else error_flag = false;
-#endif
-
-#ifdef THERMAL_CAMERA_HI
-  Wire.begin(sda_pin, clk_pin);
-  Wire.setClock(400000); //Increase I2C clock speed to 400kHz
-  delay(5000);
-  if (isConnected() == false)
-    {
-      debugln("MLX90640 not detected at default I2C address. Please check wiring. Freezing.");
-      error_flag = true;
-    }
-    debugln("MLX90640 online!");
-    error_flag = false;
-    //Get device parameters - We only have to do this once
-    int status;
-    uint16_t eeMLX90640[832];
-    status = MLX90640_DumpEE(MLX90640_address, eeMLX90640);
-    if (status != 0){
-      debugln("Failed to load system parameters");
-      error_flag = true;
-    }
-    status = MLX90640_ExtractParameters(eeMLX90640, &mlx90640);
-    if (status != 0){
-      debugln("Parameter extraction failed");
-      error_flag = true;
-    }
-
-    //Once params are extracted, we can release eeMLX90640 array
-    //MLX90640_SetRefreshRate(MLX90640_address, 0x02); //Set rate to 2Hz
-    MLX90640_SetRefreshRate(MLX90640_address, 0x03); //Set rate to 4Hz
-    //MLX90640_SetRefreshRate(MLX90640_address, 0x07); //Set rate to 64Hz
 #endif
 
 #ifdef RGB
@@ -1383,60 +1313,6 @@ if (WiFi.status() == WL_CONNECTED){
           debugln("");
 
           client.setBufferSize((AMG88xx_PIXEL_ARRAY_SIZE*16)+128);
-          // debug("mqtt buffer size: "); debugln(client.getBufferSize());
-          rc = client.publish(data_topic_char, out);
-        } else {
-          rc = client.publish(error_topic_char, "sensor not found");
-          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
-        }
-        if (!rc) {
-          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
-          digitalWrite(sonoff_led_blue, LOW);
-        } else debugln("MQTT data send successfully");
-      #endif
-
-      #ifdef THERMAL_CAMERA_HI
-        if (!error_flag) {
-          int boardArray [pixel];
-          int boardArrayTwo [row][clom];
-
-          for (byte x = 0 ; x < 2 ; x++) //Read both subpages
-            {
-              uint16_t mlx90640Frame[834];
-              int status = MLX90640_GetFrameData(MLX90640_address, mlx90640Frame);
-              if (status < 0)
-              {
-                Serial.print("GetFrame Error: ");
-                Serial.println(status);
-              }
-
-              float vdd = MLX90640_GetVdd(mlx90640Frame, &mlx90640);
-              float Ta = MLX90640_GetTa(mlx90640Frame, &mlx90640);
-
-              float tr = Ta - TA_SHIFT; //Reflected temperature based on the sensor ambient temperature
-              float emissivity = 0.95;
-
-              MLX90640_CalculateTo(mlx90640Frame, &mlx90640, emissivity, tr, mlx90640To);
-            }
-
-            for (int x = 0 ; x < 10 ; x++)
-            {
-              Serial.print("Pixel ");
-              Serial.print(x);
-              Serial.print(": ");
-              Serial.print(mlx90640To[x], 2);
-              Serial.print("C");
-              Serial.println();
-            }
-
-            StaticJsonDocument<128> doc;
-            doc["value"] = "test";
-
-          char out[786];
-          serializeJson(doc, out);
-
-
-          // client.setBufferSize((AMG88xx_PIXEL_ARRAY_SIZE*16)+128);
           // debug("mqtt buffer size: "); debugln(client.getBufferSize());
           rc = client.publish(data_topic_char, out);
         } else {
