@@ -33,5 +33,8 @@ const device_details devices[] = {
   {0x0042970A, "031"},  // Sand valve - prototype
   {0x00D5B7A1, "032"},  // Sand valve 2
   {0x00D5A22A, "033"},  // Water valve 1
+  {0x001B3B07, "034"},  // Water valve 2
+  {0x00D5246C, "035"},  // Water valve 3
+  {0x00D5B8A1, "036"},  // Water valve 4
   {0x00, "099"} // blank or dummy default if not defined above
 };
