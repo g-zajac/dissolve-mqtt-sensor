@@ -5,11 +5,11 @@
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY             // no sensor connected, just send random values
 // #define TOF0
-// #define TOF1
+#define TOF1
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
-// #define THERMAL_CAMERA_LO //
+// #define THERMAL_CAMERA_LO   // AMG88xx
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
 // #define MIC
@@ -23,7 +23,7 @@
 // #define AIR                 // CCS811 gas sensor
 // #define DUST                 // nodeMCU platform
 // #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-#define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -86,10 +86,10 @@ extern "C"{
 #endif
 
 #ifdef THERMAL_CAMERA_LO
+  #include <Adafruit_AMG88xx.h>
   #include <Wire.h>
   #include <SPI.h>
-  #include "MLX90640_API.h"
-  #include "MLX90640_I2C_Driver.h"
+  Adafruit_AMG88xx amg;
 #endif
 
 #ifdef RGB
@@ -279,6 +279,8 @@ PubSubClient client(espClient);
   // HX711 scale;
   HX711_ADC LoadCell(sda_pin, clk_pin);
   unsigned long t = 0;
+  // #define CELL_FACTOR -1000 // 4 cell
+  #define CELL_FACTOR 1000 // 1 cell
 #endif
 
 #if defined(SAND) || defined(WATER)
@@ -766,7 +768,7 @@ mDNSname = unit_id;
     error_flag = true;
   }
   else {
-    LoadCell.setCalFactor(-1000); // user set calibration value (float), initial value 1.0 may be used for this sketch
+    LoadCell.setCalFactor(CELL_FACTOR); // user set calibration value (float), initial value 1.0 may be used for this sketch
     LoadCell.tareNoDelay();
     debugln("Startup is complete");
     error_flag = false;
@@ -1212,7 +1214,7 @@ if (WiFi.status() == WL_CONNECTED){
           // doc["raw"] = weight_raw;
 
           doc["value"] = LoadCell.getData();
-          doc["tare_status"] = LoadCell.getTareStatus();
+          // doc["tare_status"] = LoadCell.getTareStatus();
 
 
         char out[128];
