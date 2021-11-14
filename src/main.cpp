@@ -3,24 +3,27 @@
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
-// #define DUMMY            // no sensor connected, just send random values
+// #define DUMMY             // no sensor connected, just send random values
 // #define TOF0
-// #define TOF1
+#define TOF1
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
-// #define THERMAL_CAMERA
-// #define RGB     //        // TCS34725
-// #define LIGHT          //ISL29125
+// #define THERMAL_CAMERA_LO   // AMG88xx
+// #define RGB              // TCS34725
+// #define LIGHT            //ISL29125
 // #define MIC
-// #define SRF01      // connection detection does not work
-// #define PROXIMITY // double eye sensor
+// #define SRF01            // connection detection does not work
+// #define SRF02
+// #define PROXIMITY           // HC-SR04 double eye sensor
 // #define WEIGHT
-// #define GYRO      // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
+// #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
-
-#define SERVO   // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
-
+// #define HR                  // heart rate on MAX30102
+// #define AIR                 // CCS811 gas sensor
+// #define DUST                 // nodeMCU platform
+// #define SAND            // sand valve, CHANGE PLATFORM, NOT SONOFF!!!
+// #define WATER            // water valve, CHANGE PLATFORM, NOT SONOFF!!!
 //------------------------------------------------------------------------------
 #define MQTT_TOPIC "resonance/sensor/"
 #define MQTT_SUB_TOPIC_SOCKET "resonance/socket/"
@@ -51,12 +54,12 @@
 // "" - the same folder <> lib folder
 // #include "sensor_functions.h"
 // TestLib test(true);
-
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 extern "C"{
- #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
+    #include "user_interface.h"    //NOTE needed for esp_system_info Since the include file from SDK is a plain C not a C++
 }
+
 #include "credentials.h"
 #include <ArduinoJson.h>
 #include <PubSubClient.h>
@@ -71,18 +74,18 @@ extern "C"{
 #endif
 
 #ifdef WEIGHT
+  // #include <HX711.h>
   #include <HX711_ADC.h>
 #endif
 
 #ifdef GYRO
-  #include <Wire.h>
   #include <Wire.h>
   #include <Adafruit_Sensor.h>
   #include <Adafruit_BNO055.h>
   #include <utility/imumaths.h>
 #endif
 
-#ifdef THERMAL_CAMERA
+#ifdef THERMAL_CAMERA_LO
   #include <Adafruit_AMG88xx.h>
   #include <Wire.h>
   #include <SPI.h>
@@ -101,9 +104,10 @@ extern "C"{
 
 // SOCKET does not have any sensor
 
-#ifdef SERVO
-  #define SERVO_SPEED 5
+#if defined(SAND) || defined(WATER)
+  #define SERVO_SPEED 10
   #define SERVO_PIN 4 //D2 SDA
+  #define ONBOARD_LED 16
   #include <Servo.h>
 #endif
 
@@ -151,11 +155,28 @@ extern "C"{
   SoftwareSerial srf01 = SoftwareSerial(SRF_TXRX, SRF_TXRX);      // Sets up software serial port for the SRF01
 #endif
 
+#ifdef SRF02
+  #include <Wire.h>
+#endif
+
 #ifdef LIGHT
   #include <Wire.h>
   #include "SparkFunISL29125.h"
   // Declare sensor object
   SFE_ISL29125 RGB_sensor;
+#endif
+
+#ifdef HR
+  #include <Wire.h>
+  #include "MAX30105.h"
+  #include "heartRate.h"
+  MAX30105 particleSensor;
+#endif
+
+#ifdef AIR
+  #include <Wire.h>
+  #include "ccs811.h"
+  CCS811 ccs811;
 #endif
 
 //--------------------------------- PIN CONFIG ---------------------------------
@@ -174,28 +195,28 @@ extern "C"{
 
 #ifdef PROXIMITY
   // sensors pin map (sonoff minijack avaliable pins: 4, 14);
-  #define trigPin 4 //D2 SDA
-  #define echoPin 14//D5 SCLK
+  #define trigPin 4 //D2 SDA - white
+  #define echoPin 14//D5 SCLK - red
 #endif
 
-#ifdef THERMAL_CAMERA
+#ifdef THERMAL_CAMERA_LO
   float pixels[AMG88xx_PIXEL_ARRAY_SIZE];
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
 #endif
 
 // NOTE different pin on socket? TH? to check
-#ifdef SOCKET
-  #define relay_pin 12 //figure out socket relay pin
-#endif
+// #ifdef SOCKET
+//   #define relay_pin 12 //figure out socket relay pin
+// #endif
 
-#ifndef SOCKET
+#if defined (SAND) || defined (WATER)
+  Servo myservo;
+  #define relay_pin 16  // led on board, stop glowing
+#else
   #define relay_pin 12 //TH relay with red LED, D6 on nodeMCU
 #endif
 
-#ifdef SERVO
-  Servo myservo;
-#endif
 
 #ifdef GYRO
   // Wemos D1 different I2C pins!!!
@@ -207,7 +228,7 @@ extern "C"{
   Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 #endif
 
-#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC)
+#if defined(TOF0) || defined(TOF1) || defined(GESTURE) || defined(WEIGHT) || defined(RGB) || defined(MIC) || defined(SRF02) || defined(HR) || defined(AIR)
   // 2.5mm TRRS -> + black sleeve, - green
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
@@ -228,6 +249,10 @@ extern "C"{
 #ifdef LIGHT
   #define sda_pin 4 //D2 SDA - white
   #define clk_pin 14//D5 SCLK - red
+#endif
+
+#ifdef DUST
+  int pin = 14;
 #endif
 
 //------------------------------- VARs declarations ----------------------------
@@ -251,11 +276,14 @@ WiFiEventHandler wifiDisconnectHandler;
 PubSubClient client(espClient);
 
 #ifdef WEIGHT
+  // HX711 scale;
   HX711_ADC LoadCell(sda_pin, clk_pin);
-  long t;
+  unsigned long t = 0;
+  // #define CELL_FACTOR -1000 // 4 cell
+  #define CELL_FACTOR 1000 // 1 cell
 #endif
 
-#ifdef SERVO
+#if defined(SAND) || defined(WATER)
   #define sonoff_led_blue 2 // build in LED on chip
   int prev_pos = 0;
   int pos = 0; // variable to store the servo position
@@ -287,6 +315,42 @@ PubSubClient client(espClient);
   float t =0;
 #endif
 
+#ifdef HR
+  const byte RATE_SIZE = 4; //Increase this for more averaging. 4 is good.
+  byte rates[RATE_SIZE]; //Array of heart rates
+  byte rateSpot = 0;
+  long lastBeat = 0; //Time at which the last beat occurred
+  float beatsPerMinute;
+  int beatAvg;
+  bool finger;
+#endif
+
+#ifdef AIR
+  uint16_t eco2, etvoc, errstat, raw;
+#endif
+
+#ifdef DUST
+  unsigned long duration;
+  unsigned long starttime;
+  unsigned long sampletime_ms = 30000;//sampe 30s ;
+  unsigned long lowpulseoccupancy = 0;
+  unsigned long lowpulseoccupancyMQTT = 0;
+  float ratio = 0;
+  float concentration = 0;
+#endif
+
+#ifdef SAND
+  // calibrated manualy 0-90 deg
+  int servo_pulse_min = 900;  // 800
+  int servo_pulse_max = 2000; // 2000
+#endif
+
+#ifdef WATER
+  // calibrated manualy, max turn 0-270
+  int servo_pulse_min = 500;  // 500
+  int servo_pulse_max = 2500; // 2500
+#endif
+
 //------------------------------------------------------------------------------
 // TODO move to lib, external object?
 // Sensors labels, used in MQTT topic, report, mDNS etc
@@ -296,7 +360,7 @@ PubSubClient client(espClient);
   const String sensor_model = "dummy";
 #endif
 #ifdef PROXIMITY
-  const unsigned long sensorInterval = 3000;
+  const unsigned long sensorInterval = 1000;
   const String sensor_type = "proximity";
   const String sensor_model = "HC-SR04";
 #endif
@@ -310,7 +374,7 @@ PubSubClient client(espClient);
   const String sensor_type = "gyro";
   const String sensor_model = "BN0055";
 #endif
-#ifdef THERMAL_CAMERA
+#ifdef THERMAL_CAMERA_LO
   const unsigned long sensorInterval = 500;
   const String sensor_type = "thermal_camera";
   const String sensor_model = "AMG8833";
@@ -320,10 +384,15 @@ PubSubClient client(espClient);
   const String sensor_type = "socket";
   const String sensor_model = "sonoff socket";
 #endif
-#ifdef SERVO
+#ifdef SAND
   const unsigned long sensorInterval = 1000;
   const String sensor_type = "sand";
   const String sensor_model = "MG996R";
+#endif
+#ifdef WATER
+  const unsigned long sensorInterval = 1000;
+  const String sensor_type = "water";
+  const String sensor_model = "MS24";
 #endif
 #ifdef GESTURE
   const unsigned long sensorInterval = 500;
@@ -370,12 +439,31 @@ PubSubClient client(espClient);
   const String sensor_type = "proximity";
   const String sensor_model = "SRF01";
 #endif
-
+#ifdef SRF02
+  const unsigned long sensorInterval = 500;
+  const String sensor_type = "proximity";
+  const String sensor_model = "SRF02";
+#endif
+#ifdef HR
+  const unsigned long sensorInterval = 2000;
+  const String sensor_type = "heart";
+  const String sensor_model = "MAX30102";
+#endif
+#ifdef AIR
+  const unsigned long sensorInterval = 3000;
+  const String sensor_type = "air";
+  const String sensor_model = "CCS811";
+#endif
+#ifdef DUST
+  const unsigned long sensorInterval = 3000;
+  const String sensor_type = "dust";
+  const String sensor_model = "dust";
+#endif
 
 // form mqtt topic based on template and id
 #if defined (SOCKET)
   String topicPrefix = MQTT_SUB_TOPIC_SOCKET;
-#elif defined (SERVO)
+#elif defined (SAND) || defined (WATER)
   String topicPrefix = MQTT_SUB_TOPIC_SERVO;
 #else
   String topicPrefix = MQTT_TOPIC;
@@ -403,6 +491,43 @@ String button_topic = "";
     int availbleJunk = srf01.available();               // As RX and TX are the same pin it will have recieved the data we just sent out, as we dont want this we read it back and ignore it as junk before waiting for useful data to arrive
     for(int x = 0;  x < availbleJunk; x++) byte junk = srf01.read();
   }
+#endif
+
+#ifdef SRF02
+    int readDistance(){
+      int reading = 0;
+      // step 1: instruct sensor to read echoes
+      Wire.beginTransmission(112); // transmit to device #112 (0x70)
+      // the address specified in the datasheet is 224 (0xE0)
+      // but i2c adressing uses the high 7 bits so it's 112
+      Wire.write(byte(0x00));      // sets register pointer to the command register (0x00)
+      Wire.write(byte(0x51));      // command sensor to measure in "centimeters" (0x51)
+      // use 0x51 for centimeters
+      // use 0x52 for ping microseconds
+      Wire.endTransmission();      // stop transmitting
+
+      // step 2: wait for readings to happen
+      delay(70);                   // datasheet suggests at least 65 milliseconds
+
+      // step 3: instruct sensor to return a particular echo reading
+      Wire.beginTransmission(112); // transmit to device #112
+      Wire.write(byte(0x02));      // sets register pointer to echo #1 register (0x02)
+      Wire.endTransmission();      // stop transmitting
+
+      // step 4: request reading from sensor
+      Wire.requestFrom(112, 2);    // request 2 bytes from slave device #112
+
+      // step 5: receive reading from sensor
+      if (2 <= Wire.available())   // if two bytes were received
+        {
+          reading = Wire.read();  // receive high byte (overwrites previous reading)
+          reading = reading << 8;    // shift high byte to be high 8 bits
+          reading |= Wire.read(); // receive low byte as lower 8 bits
+          Serial.print(reading);   // print the reading
+          Serial.println("cm");
+          return reading;
+        } else return 9999;        // for error detection
+    } // end of readDistance
 #endif
 
 int uptimeInSecs(){
@@ -459,7 +584,8 @@ boolean reconnect() {
     digitalWrite(trigPin, LOW);
 
     float duration = pulseIn(echoPin, HIGH);
-    float distance = (duration*.0343)/2;
+    float distance_float = (duration*.0343)/2;
+    int distance = int(distance_float);
     return distance;
   }
 #endif
@@ -483,21 +609,33 @@ void callback(char* topic, byte* payload, unsigned int length) {
     deserializeJson(doc, payload, length);
     // check for specific keys in payload
     bool hasRelay = doc.containsKey("relay");
-    #ifdef SERVO
+    #ifdef SAND
       bool hasPosition = doc.containsKey("sand");
+    #endif
+    #ifdef WATER
+      bool hasPosition = doc.containsKey("water");
     #endif
 
     if (hasRelay){
       bool relayStatus = doc["relay"];
-      debug("relay turned to: "); debugln(relayStatus);
-      digitalWrite(relay_pin, relayStatus);
+      debug("relay on pin: "); debug(relay_pin); debug("turned to: "); debugln(relayStatus);
+      #if defined(SAND) || defined(WATER)
+        digitalWrite(relay_pin, !relayStatus);  // led on on LOW
+      #else
+        digitalWrite(relay_pin, relayStatus);
+      #endif
     }
 
-  #ifdef SERVO
+  #if defined(SAND) || defined(WATER)
       if (hasPosition){
-        int position = doc["sand"];
+        #ifdef SAND
+          int position = doc["sand"];
+        #endif
+        #ifdef WATER
+          int position = doc["water"];
+        #endif
+        // myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
         debug("received message position: "); debugln(position);
-
         int new_pos = map(position, 0, 100, 0, 180);
         debug("new position in deg: "); debugln(new_pos);
         prev_pos = myservo.read();
@@ -510,6 +648,10 @@ void callback(char* topic, byte* payload, unsigned int length) {
         else {debug("received wrong format servo position: "); debugln(position);}
 
         debug("moving servo to position: "); debugln(pos);
+        // FAST
+        // myservo.write(pos);
+
+        // SLOW
         if (pos > prev_pos){
           for (int p = prev_pos; p <= pos; p+=1 ){
           myservo.write(p);
@@ -524,7 +666,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
           debugln("position the same, do nothing");
         }
         debugln("moving servo completed");
+        // myservo.detach();
       } // end hasPosition if
+
   #endif
   } // end of if string = sub topic
   debugln("- - - - - - - - - - - - -");
@@ -601,19 +745,35 @@ mDNSname = unit_id;
 #endif
 
 #ifdef WEIGHT
-  float calValue = 696;             // calibration value, depends on your individual load cell setup
-  LoadCell.begin();                 // start connection to load cell module
+  // scale.begin(sda_pin, clk_pin);
+  // scale.set_scale();
+  // scale.set_scale(300.f);  //2280
+  // scale.tare();
 
-  LoadCell.start(2000);
-  if (LoadCell.getTareTimeoutFlag()) {
+  // if (scale.wait_ready_timeout(1000)){
+  //   error_flag = false;
+  //   debugln("HX711 startup is complete");
+  // } else {
+  //   debugln("Timeout, check MCU>HX711 wiring and pin designations");
+  //   error_flag = true;
+  // }
+
+  LoadCell.begin();
+
+  unsigned long stabilizingtime = 2000; // preciscion right after power-up can be improved by adding a few seconds of stabilizing time
+  boolean _tare = true; //set this to false if you don't want tare to be performed in the next step
+  LoadCell.start(stabilizingtime, _tare);
+  if (LoadCell.getTareTimeoutFlag() || LoadCell.getSignalTimeoutFlag()) {
     debugln("Timeout, check MCU>HX711 wiring and pin designations");
     error_flag = true;
   }
   else {
-    LoadCell.setCalFactor(calValue); // set calibration factor (float)
-    Serial.println("HX711 startup is complete");
+    LoadCell.setCalFactor(CELL_FACTOR); // user set calibration value (float), initial value 1.0 may be used for this sketch
+    LoadCell.tareNoDelay();
+    debugln("Startup is complete");
     error_flag = false;
   }
+
 #endif
 
 #ifdef GYRO
@@ -628,7 +788,7 @@ mDNSname = unit_id;
   }
 #endif
 
-#ifdef THERMAL_CAMERA
+#ifdef THERMAL_CAMERA_LO
   Wire.begin(sda_pin, clk_pin);
   bool status;
   // default settings
@@ -675,8 +835,10 @@ mDNSname = unit_id;
   digitalWrite(relay_pin, LOW); // default off
 #endif
 
-#ifdef SERVO
-  myservo.attach(SERVO_PIN);
+#if defined(SAND) || defined(WATER)
+  digitalWrite(relay_pin, HIGH); // default off
+  // myservo.attach(SERVO_PIN);
+  myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
   delay(20);
   myservo.write(180);             // close by default
   debug("servo @ position: "); debugln(pos);
@@ -815,7 +977,71 @@ mDNSname = unit_id;
   }
 #endif
 
+#ifdef SRF02
+  Wire.begin(sda_pin, clk_pin);
+  // read test
+  debugln("waiting for serial");
+  delay(5000);
+  debugln("reading distance from srf02");
+  int distance = readDistance();
+  if (distance == 9999) {
+    debugln("Failed to read from DHT sensor!");
+    error_flag = true;
+  } else {
+    debug("distance = "); debug(distance);
+    error_flag = false;
+  }
+#endif
 
+#ifdef HR
+  Wire.begin(sda_pin, clk_pin);
+  // Initialize sensor
+  if (particleSensor.begin(Wire, I2C_SPEED_FAST) == false) //Use default I2C port, 400kHz speed
+  {
+    debugln("MAX30105 was not found.");
+    error_flag = true;
+  } else {
+    byte ledBrightness = 70; //Options: 0=Off to 255=50mA
+    byte sampleAverage = 1; //Options: 1, 2, 4, 8, 16, 32
+    byte ledMode = 2; //Options: 1 = Red only, 2 = Red + IR, 3 = Red + IR + Green
+    int sampleRate = 400; //Options: 50, 100, 200, 400, 800, 1000, 1600, 3200
+    int pulseWidth = 69; //Options: 69, 118, 215, 411
+    int adcRange = 16384; //Options: 2048, 4096, 8192, 16384
+    // particleSensor.setup(ledBrightness, sampleAverage, ledMode, sampleRate, pulseWidth, adcRange);
+
+    particleSensor.setup(); //Configure sensor with default settings
+    particleSensor.setPulseAmplitudeRed(0x0A); //Turn Red LED to low to indicate sensor is running
+    particleSensor.setPulseAmplitudeGreen(0); //Turn off Green LED
+    error_flag = false;
+  }
+#endif
+
+#ifdef AIR
+  Wire.begin(sda_pin, clk_pin);
+  ccs811.set_i2cdelay(50);
+
+  bool ok= ccs811.begin();
+  if( !ok ){
+   debugln("Failed to start sensor!");
+   error_flag = true;
+ } else {
+   error_flag = false;
+ }
+ // Print CCS811 versions
+   // Serial.print("setup: hardware    version: "); Serial.println(ccs811.hardware_version(),HEX);
+   // Serial.print("setup: bootloader  version: "); Serial.println(ccs811.bootloader_version(),HEX);
+   // Serial.print("setup: application version: "); Serial.println(ccs811.application_version(),HEX);
+
+   ok= ccs811.start(CCS811_MODE_1SEC);
+   if( !ok ) {error_flag = true;}
+   debug("ccs811 start flag = "); debugln(ok);
+#endif
+
+#ifdef DUST
+  pinMode(pin,INPUT);
+  starttime = millis();//get the current time;
+  error_flag = false;
+#endif
 //------------------------------------------------------------------------------
 
 //Register wifi event handlers
@@ -880,10 +1106,6 @@ if (WiFi.status() == WL_CONNECTED){
     webota.handle();
   #endif
 
-  #ifdef WEIGHT
-    if (!error_flag) LoadCell.update();
-  #endif
-
   #ifdef GYRO
     //
   #endif
@@ -907,6 +1129,53 @@ if (WiFi.status() == WL_CONNECTED){
   }
   #endif
 
+  #ifdef HR
+    long irValue = particleSensor.getIR();
+      if (checkForBeat(irValue) == true)
+        {
+          //We sensed a beat!
+          long delta = millis() - lastBeat;
+          lastBeat = millis();
+
+          beatsPerMinute = 60 / (delta / 1000.0);
+
+          if (beatsPerMinute < 255 && beatsPerMinute > 20)
+          {
+            rates[rateSpot++] = (byte)beatsPerMinute; //Store this reading in the array
+            rateSpot %= RATE_SIZE; //Wrap variable
+
+            //Take average of readings
+            beatAvg = 0;
+            for (byte x = 0 ; x < RATE_SIZE ; x++)
+              beatAvg += rates[x];
+              beatAvg /= RATE_SIZE;
+            }
+        }
+
+        if (irValue < 5000){
+          finger = 0;
+        } else finger = 1;
+
+  #endif
+
+  #ifdef DUST
+  duration = pulseIn(pin, LOW);
+  lowpulseoccupancy = lowpulseoccupancy+duration;
+
+  if ((millis()-starttime) > sampletime_ms)//if the sampel time == 30s
+  {
+      ratio = lowpulseoccupancy/(sampletime_ms*10.0);  // Integer percentage 0=>100
+      concentration = 1.1*pow(ratio,3)-3.8*pow(ratio,2)+520*ratio+0.62; // using spec sheet curve
+      lowpulseoccupancyMQTT = lowpulseoccupancy;
+      lowpulseoccupancy = 0;
+      starttime = millis();
+  }
+  #endif
+
+  #ifdef WEIGHT
+    static boolean newDataReady = 0;
+    if (LoadCell.update()) newDataReady = true;
+  #endif
 
   unsigned long sensorDiff = millis() - previousSensorTime;
     if((sensorDiff > sensorInterval) && client.connected()) {
@@ -935,11 +1204,18 @@ if (WiFi.status() == WL_CONNECTED){
 
       #ifdef WEIGHT
         if (!error_flag){
+          StaticJsonDocument<128> doc;
 
-        StaticJsonDocument<128> doc;
-        doc["value"] = LoadCell.getData();
-        doc["calibration"] = LoadCell.getData();
-        doc["setling"] =LoadCell.getSettlingTime();
+          // unsigned long weight = scale.get_units();
+          // unsigned long weight_average = scale.get_units(10);
+          // unsigned long weight_raw = scale.read();
+          // doc["value"] = weight;
+          // doc["average10"] = weight_average;
+          // doc["raw"] = weight_raw;
+
+          doc["value"] = LoadCell.getData();
+          // doc["tare_status"] = LoadCell.getTareStatus();
+
 
         char out[128];
         serializeJson(doc, out);
@@ -1027,7 +1303,7 @@ if (WiFi.status() == WL_CONNECTED){
         } else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef THERMAL_CAMERA
+      #ifdef THERMAL_CAMERA_LO
         if (!error_flag) {
         StaticJsonDocument<1152> doc;
         JsonArray data = doc.createNestedArray("value");
@@ -1130,10 +1406,12 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
-      #ifdef SERVO
+      #if defined(SAND) || defined(WATER)
         if(!error_flag){
+          // myservo.attach(SERVO_PIN, servo_pulse_min, servo_pulse_max);
           StaticJsonDocument<128> doc;
           doc["valve_position"] = map(myservo.read(), 0, 180, 0, 100);
+          // myservo.detach();
           char out[128];
           serializeJson(doc, out);
 
@@ -1296,11 +1574,111 @@ if (WiFi.status() == WL_CONNECTED){
         else debugln("MQTT data send successfully");
       #endif
 
+      #ifdef SRF02
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["value"] = readDistance();
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef HR
+        if (!error_flag){
+          particleSensor.check(); //Check the sensor
+           if (particleSensor.available()) {
+              // read stored IR
+              Serial.print(particleSensor.getFIFOIR());
+              Serial.print(",");
+              // read stored red
+              Serial.println(particleSensor.getFIFORed());
+              // read next set of samples
+              particleSensor.nextSample();
+          } // end of if particle sensor avaliable
+
+          StaticJsonDocument<128> doc;
+          doc["HR"] = beatsPerMinute;
+          doc["AvgHR"] = beatAvg;
+          doc["finger"] = finger;
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+          } else {
+            rc = client.publish(error_topic_char, "sensor not found");
+            debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+          }
+          if (!rc) {
+            debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+            digitalWrite(sonoff_led_blue, LOW);
+          }
+          else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef AIR
+        if (!error_flag){
+          StaticJsonDocument<128> doc;
+          ccs811.read(&eco2,&etvoc,&errstat,&raw);
+            if( errstat==CCS811_ERRSTAT_OK ) {
+              doc["CO2"] = eco2;
+              doc["TVOC"] = etvoc;
+            } else if( errstat==CCS811_ERRSTAT_OK_NODATA ) {
+              debugln("CCS811: waiting for (new) data");
+            } else if( errstat & CCS811_ERRSTAT_I2CFAIL ) {
+              debugln("CCS811: I2C error");
+            } else {
+              #if SERIAL_DEBUG == 1
+              Serial.print("CCS811: errstat="); Serial.print(errstat,HEX);
+              Serial.print("="); Serial.println( ccs811.errstat_str(errstat) );
+              #endif
+            }
+
+            char out[128];
+            serializeJson(doc, out);
+            rc = client.publish(data_topic_char, out);
+
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+          debug("MQTT error message sent on topic: "); debugln(error_topic_char);
+        }
+        if (!rc) {
+          debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);
+          digitalWrite(sonoff_led_blue, LOW);
+        }
+        else debugln("MQTT data send successfully");
+      #endif
+
+      #ifdef DUST
+        if(!error_flag){
+          StaticJsonDocument<128> doc;
+          doc["Lowpulseoccupancy"] = lowpulseoccupancyMQTT;
+          doc["ratio"] = ratio;
+          doc["concentratin"] = concentration;
+          doc["timer30s"] = 30 - ((millis()-starttime) / 1000);
+          char out[128];
+          serializeJson(doc, out);
+
+          rc = client.publish(data_topic_char, out);
+        } else {
+          rc = client.publish(error_topic_char, "sensor not found");
+        }
+        if (!rc) {debug("MQTT data not sent, too big or not connected - flag: "); debugln(rc);}
+        else debugln("MQTT data send successfully");
+      #endif
+
 
       previousSensorTime = millis();
       // block_report = false;
       digitalWrite(sonoff_led_blue, HIGH);
   }
+
+//------------------------------------------------------------------------------
 
   #ifdef MQTT_REPORT
     unsigned long reportDiff = millis() - previousReportTime;
