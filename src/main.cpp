@@ -1,11 +1,11 @@
-#define VERSION "1.7.3"
+#define VERSION "1.7.3c"
 //NOTE remember to update document with versioning:
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY             // no sensor connected, just send random values
-// #define TOF0
-#define TOF1
+#define TOF0
+// #define TOF1
 // #define GESTURE
 // #define HUMIDITY
 // #define DHT
@@ -370,7 +370,7 @@ PubSubClient client(espClient);
   const String sensor_model = "HX711";
 #endif
 #ifdef GYRO
-  const unsigned long sensorInterval = 300;
+  const unsigned long sensorInterval = 50;
   const String sensor_type = "gyro";
   const String sensor_model = "BN0055";
 #endif
@@ -400,12 +400,14 @@ PubSubClient client(espClient);
   const String sensor_model = "APDS9960";
 #endif
 #ifdef TOF0
-  const unsigned long sensorInterval = 300;
+  // reposnse time is less then 30ms
+  const unsigned long sensorInterval = 40;
   const String sensor_type = "proximity";
   const String sensor_model = "VL53L0X";
 #endif
 #ifdef TOF1
-  const unsigned long sensorInterval = 300;
+  // inter measurment period 50ms
+  const unsigned long sensorInterval = 80;
   const String sensor_type = "proximity";
   const String sensor_model = "VL53L1X";
 #endif
@@ -415,7 +417,7 @@ PubSubClient client(espClient);
   const String sensor_model = "-";
 #endif
 #ifdef DHT
-  const unsigned long sensorInterval = 1000;
+  const unsigned long sensorInterval = 300;
   const String sensor_type = "humidity";
   const String sensor_model = "DHT22";
 #endif
@@ -435,12 +437,13 @@ PubSubClient client(espClient);
   const String sensor_model = "ADS1015+MAX9814";
 #endif
 #ifdef SRF01
-  const unsigned long sensorInterval = 400;
+  const unsigned long sensorInterval = 100;
   const String sensor_type = "proximity";
   const String sensor_model = "SRF01";
 #endif
 #ifdef SRF02
-  const unsigned long sensorInterval = 500;
+  // The ranging last up to 65mS, the SRF02 will not respond to commands on I2C bus whilist is ranging
+  const unsigned long sensorInterval = 80;
   const String sensor_type = "proximity";
   const String sensor_model = "SRF02";
 #endif
