@@ -4,7 +4,7 @@
 
 //------------------------------ SELECT SENSOR ---------------------------------
 // #define DUMMY             // no sensor connected, just send random values
-#define TOF0
+// #define TOF0
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
@@ -16,7 +16,7 @@
 // #define SRF01            // connection detection does not work
 // #define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
-// #define WEIGHT
+#define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
@@ -360,12 +360,14 @@ PubSubClient client(espClient);
   const String sensor_model = "dummy";
 #endif
 #ifdef PROXIMITY
-  const unsigned long sensorInterval = 1000;
+  // highest sampling rate for 5m is 34Hz
+  const unsigned long sensorInterval = 100;
   const String sensor_type = "proximity";
   const String sensor_model = "HC-SR04";
 #endif
 #ifdef WEIGHT
-  const unsigned long sensorInterval = 1000;
+  // the max of HX711 data rate is 80 samples / sec
+  const unsigned long sensorInterval = 500;
   const String sensor_type = "weight";
   const String sensor_model = "HX711";
 #endif
@@ -375,7 +377,8 @@ PubSubClient client(espClient);
   const String sensor_model = "BN0055";
 #endif
 #ifdef THERMAL_CAMERA_LO
-  const unsigned long sensorInterval = 500;
+  // maximum frame rate 10Hz
+  const unsigned long sensorInterval = 110;
   const String sensor_type = "thermal_camera";
   const String sensor_model = "AMG8833";
 #endif
@@ -395,7 +398,7 @@ PubSubClient client(espClient);
   const String sensor_model = "MS24";
 #endif
 #ifdef GESTURE
-  const unsigned long sensorInterval = 500;
+  const unsigned long sensorInterval = 150;
   const String sensor_type = "gesture";
   const String sensor_model = "APDS9960";
 #endif
@@ -417,22 +420,23 @@ PubSubClient client(espClient);
   const String sensor_model = "-";
 #endif
 #ifdef DHT
-  const unsigned long sensorInterval = 300;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "humidity";
   const String sensor_model = "DHT22";
 #endif
 #ifdef RGB
-  const unsigned long sensorInterval = 500;
+  // practicly sampling rate is around 60Hz
+  const unsigned long sensorInterval = 100;
   const String sensor_type = "light";
   const String sensor_model = "TCS34725";
 #endif
 #ifdef LIGHT
-  const unsigned long sensorInterval = 500;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "light";
   const String sensor_model = "ISL29125";
 #endif
 #ifdef MIC
-  const unsigned long sensorInterval = 300;
+  const unsigned long sensorInterval = 50;
   const String sensor_type = "microphone";
   const String sensor_model = "ADS1015+MAX9814";
 #endif
@@ -448,12 +452,13 @@ PubSubClient client(espClient);
   const String sensor_model = "SRF02";
 #endif
 #ifdef HR
-  const unsigned long sensorInterval = 2000;
+  const unsigned long sensorInterval = 350;
   const String sensor_type = "heart";
   const String sensor_model = "MAX30102";
 #endif
 #ifdef AIR
-  const unsigned long sensorInterval = 3000;
+  // sensor sampling set to 1S?
+  const unsigned long sensorInterval = 1500;
   const String sensor_type = "air";
   const String sensor_model = "CCS811";
 #endif
