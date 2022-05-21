@@ -1,4 +1,4 @@
-#define VERSION "1.7.3c"
+#define VERSION "1.7.3d"
 //NOTE remember to update document with versioning:
 // https://cryptpad.fr/pad/#/2/pad/edit/uPWWed8JJiUw1aSPgz5FRjzT/p/
 
@@ -8,7 +8,7 @@
 // #define TOF1
 // #define GESTURE
 // #define HUMIDITY
-// #define DHT
+#define DHT
 // #define THERMAL_CAMERA_LO   // AMG88xx
 // #define RGB              // TCS34725
 // #define LIGHT            //ISL29125
@@ -16,7 +16,7 @@
 // #define SRF01            // connection detection does not work
 // #define SRF02
 // #define PROXIMITY           // HC-SR04 double eye sensor
-#define WEIGHT
+// #define WEIGHT
 // #define GYRO             // OTA does not work, pay attantion to platform and declaring wire pins (do only for sonoff, not for baord esp)
 // #define SOCKET
 // #define HR                  // heart rate on MAX30102
@@ -361,7 +361,7 @@ PubSubClient client(espClient);
 #endif
 #ifdef PROXIMITY
   // highest sampling rate for 5m is 34Hz
-  const unsigned long sensorInterval = 100;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "proximity";
   const String sensor_model = "HC-SR04";
 #endif
@@ -398,19 +398,19 @@ PubSubClient client(espClient);
   const String sensor_model = "MS24";
 #endif
 #ifdef GESTURE
-  const unsigned long sensorInterval = 150;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "gesture";
   const String sensor_model = "APDS9960";
 #endif
 #ifdef TOF0
   // reposnse time is less then 30ms
-  const unsigned long sensorInterval = 40;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "proximity";
-  const String sensor_model = "VL53L0X";
+  const String sensor_model = "VL52L0X";
 #endif
 #ifdef TOF1
   // inter measurment period 50ms
-  const unsigned long sensorInterval = 80;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "proximity";
   const String sensor_model = "VL53L1X";
 #endif
@@ -426,7 +426,7 @@ PubSubClient client(espClient);
 #endif
 #ifdef RGB
   // practicly sampling rate is around 60Hz
-  const unsigned long sensorInterval = 100;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "light";
   const String sensor_model = "TCS34725";
 #endif
@@ -441,13 +441,13 @@ PubSubClient client(espClient);
   const String sensor_model = "ADS1015+MAX9814";
 #endif
 #ifdef SRF01
-  const unsigned long sensorInterval = 100;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "proximity";
   const String sensor_model = "SRF01";
 #endif
 #ifdef SRF02
   // The ranging last up to 65mS, the SRF02 will not respond to commands on I2C bus whilist is ranging
-  const unsigned long sensorInterval = 80;
+  const unsigned long sensorInterval = 200;
   const String sensor_type = "proximity";
   const String sensor_model = "SRF02";
 #endif
